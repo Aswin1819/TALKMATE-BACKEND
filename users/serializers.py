@@ -4,6 +4,7 @@ from django.utils.timesince import timesince
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth.hashers import make_password
 from rest_framework.exceptions import AuthenticationFailed
+import re
 
 
 class CustomUserSerializer(serializers.ModelSerializer):
@@ -15,16 +16,52 @@ class CustomUserSerializer(serializers.ModelSerializer):
             'email': {'required': True}
         }
 
-    # def validate_email(self,value):
-    #     if CustomUser.objects.filter(email=value).exists():
-    #         raise serializers.ValidationError("A user with this email already exists.")
-    #     return value
+    def validate_username(self,value):
+            if not re.match(r'^[A-Za-z]+( [A-Za-z]+)*$', value):
+                raise serializers.ValidationError("Username must contain only letters and spaces between words.")
+            return value
     
     def create(self, validated_data):
         validated_data['password'] = make_password(validated_data['password'])
         return super().create(validated_data)
 
         
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        # Add custom claims
+        token['email'] = user.email
+        token['username'] = user.username
+        token['user_id'] = user.id
+        token['is_verified'] = user.is_verified
+        return token
+
+    def validate(self, attrs):
+        try:
+            data = super().validate(attrs)
+        except Exception as e:
+            raise AuthenticationFailed("Invalid credentials provided.")
+
+        # Additional user validation
+        if not self.user.is_verified:
+            raise AuthenticationFailed("Email is not verified. Please verify your account.")
+        
+        if not self.user.is_active:
+            raise AuthenticationFailed("Your account has been blocked by the admin.")
+
+        # Add user data to response
+        data.update({
+            'user': {
+                'user_id': self.user.id,
+                'username': self.user.username,
+                'email': self.user.email,
+                'is_verified': self.user.is_verified,
+            }
+        })
+
+        return data
+    
 class LanguageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Language
@@ -94,31 +131,4 @@ class FriendshipSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at']
 
-class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
-    
-    @classmethod
-    def get_token(cls, user):
-        token = super().get_token(user)
-        token['email'] = user.email
-        token['username'] = user.username
-        token['is_verified'] = user.is_verified
-        return token
-
-    def validate(self, attrs):
-        data = super().validate(attrs)
-
-        if not self.user.is_verified:
-            raise AuthenticationFailed("Email is not verified. Please verify your account.")
-        
-        if not self.user.is_active:
-            raise AuthenticationFailed("Your account has been blocked by the admin")
-
-        data.update({
-            'user_id': self.user.id,
-            'username': self.user.username,
-            'email': self.user.email,
-            'is_verified': self.user.is_verified,
-        })
-
-        return data
     

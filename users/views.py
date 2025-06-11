@@ -4,13 +4,19 @@ from rest_framework import status
 from django.conf import settings
 from .models import *
 from .serializers import *
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.viewsets import ModelViewSet
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView,TokenRefreshView
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
+from rest_framework.exceptions import AuthenticationFailed
 from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
-from .utils import generate_and_send_otp,set_auth_cookies
+from rest_framework.permissions import AllowAny
+from .utils import generate_and_send_otp,set_auth_cookies,clear_auth_cookies
 
 class RegisterView(APIView):
+    permission_classes = [AllowAny]
+    
     @transaction.atomic
     def post(self, request):
         data = request.data.copy()
@@ -38,6 +44,7 @@ class RegisterView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 class CustomLoginView(TokenObtainPairView):
+    permission_classes = [AllowAny]
     serializer_class = CustomTokenObtainPairSerializer
 
     def post(self, request, *args, **kwargs):
@@ -45,32 +52,217 @@ class CustomLoginView(TokenObtainPairView):
 
         try:
             serializer.is_valid(raise_exception=True)
+        except AuthenticationFailed as e:
+            return Response(
+                {'detail': str(e)}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
         except Exception as e:
-            return Response({'detail': 'Invalid credentials or user inactive'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response(
+                {'detail': 'Invalid credentials or user inactive'}, 
+                status=status.HTTP_401_UNAUTHORIZED
+            )
 
-        user = serializer.user
-        if not user.is_verified:
-            return Response({'detail': 'Email is not verified. Please verify to log in.'}, status=status.HTTP_403_FORBIDDEN)
+        # Get tokens and user data
+        validated_data = serializer.validated_data
+        access_token = validated_data.get('access')
+        refresh_token = validated_data.get('refresh')
+        user_data = validated_data.get('user')
 
-        access_token = serializer.validated_data.get('access')
-        refresh_token = serializer.validated_data.get('refresh')
-
+        # Create response
         response_data = {
-            "user": {
-                "user_id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "is_verified": user.is_verified,
-            }
+            'message': 'Login successful',
+            'user': user_data,
+            # Include tokens in response for debugging
+            'debug': {
+                'cookies_set': True,
+                'access_token_preview': access_token[:20] + '...' if access_token else None,
+            } if settings.DEBUG else {}
         }
+        
         response = Response(response_data, status=status.HTTP_200_OK)
-
+        
+        # Set authentication cookies
         set_auth_cookies(response, access_token, refresh_token)
 
         return response
         
     
+
+# class CustomTokenRefreshView(TokenRefreshView):
+#     """Custom token refresh view that works with cookies"""
     
+#     def post(self, request, *args, **kwargs):
+#         # Try to get refresh token from cookie if not in request body
+#         if 'refresh' not in request.data:
+#             refresh_token = request.COOKIES.get('refresh_token')
+#             if refresh_token:
+#                 # Create a mutable copy of request.data
+#                 data = request.data.copy()
+#                 data['refresh'] = refresh_token
+#                 request._full_data = data
+        
+#         try:
+#             response = super().post(request, *args, **kwargs)
+            
+#             if response.status_code == 200:
+#                 # Get new tokens
+#                 access_token = response.data.get('access')
+#                 refresh_token = response.data.get('refresh')  # If rotation is enabled
+                
+#                 # Update cookies
+#                 if refresh_token:  # If refresh token rotation is enabled
+#                     set_auth_cookies(response, access_token, refresh_token)
+#                 else:
+#                     # Only update access token cookie
+#                     access_exp = settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME']
+#                     secure = getattr(settings, 'AUTH_COOKIE_SECURE', False)
+#                     samesite = getattr(settings, 'AUTH_COOKIE_SAMESITE', 'Lax')
+#                     domain = getattr(settings, 'AUTH_COOKIE_DOMAIN', None)
+                    
+#                     response.set_cookie(
+#                         key='access_token',
+#                         value=access_token,
+#                         max_age=int(access_exp.total_seconds()),
+#                         httponly=True,
+#                         secure=secure,
+#                         samesite=samesite,
+#                         path='/',
+#                         domain=domain,
+#                     )
+                
+#                 # Clean response data
+#                 response.data = {
+#                     'message': 'Token refreshed successfully',
+#                     'debug': {
+#                         'cookies_updated': True,
+#                     } if settings.DEBUG else {}
+#                 }
+            
+#             return response
+            
+#         except (TokenError, InvalidToken) as e:
+#             # Clear invalid cookies
+#             response = Response(
+#                 {'detail': 'Invalid or expired refresh token'}, 
+#                 status=status.HTTP_401_UNAUTHORIZED
+#             )
+#             clear_auth_cookies(response)
+#             return response
+    
+class CustomTokenRefreshView(TokenRefreshView):
+    """Custom token refresh view that works with cookies"""
+    
+    def post(self, request, *args, **kwargs):
+        # Debug prints
+        print("=== TOKEN REFRESH DEBUG ===")
+        print(f"Request method: {request.method}")
+        print(f"Request data: {request.data}")
+        print(f"Request cookies: {dict(request.COOKIES)}")
+        print(f"Content-Type: {request.content_type}")
+        
+        # Try to get refresh token from cookie if not in request body
+        if 'refresh' not in request.data:
+            refresh_token = request.COOKIES.get('refresh_token')
+            print(f"Refresh token from cookie: {refresh_token}")
+            
+            if refresh_token:
+                # Create a mutable copy of request.data
+                if hasattr(request, '_mutable'):
+                    request.data._mutable = True
+                    
+                data = request.data.copy()
+                data['refresh'] = refresh_token
+                
+                # Update request data
+                request._full_data = data
+                print(f"Updated request data: {data}")
+            else:
+                print("No refresh token found in cookies")
+                return Response(
+                    {'detail': 'No refresh token found'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        try:
+            response = super().post(request, *args, **kwargs)
+            print(f"Super response status: {response.status_code}")
+            print(f"Super response data: {response.data}")
+            
+            if response.status_code == 200:
+                # Get new tokens
+                access_token = response.data.get('access')
+                refresh_token = response.data.get('refresh')  # If rotation is enabled
+                
+                print(f"New access token: {access_token[:20]}..." if access_token else "No access token")
+                print(f"New refresh token: {refresh_token[:20]}..." if refresh_token else "No refresh token")
+                
+                # Update cookies
+                if refresh_token:  # If refresh token rotation is enabled
+                    set_auth_cookies(response, access_token, refresh_token)
+                else:
+                    # Only update access token cookie
+                    access_exp = settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME']
+                    secure = getattr(settings, 'AUTH_COOKIE_SECURE', False)
+                    samesite = getattr(settings, 'AUTH_COOKIE_SAMESITE', 'Lax')
+                    domain = getattr(settings, 'AUTH_COOKIE_DOMAIN', None)
+                    
+                    response.set_cookie(
+                        key='access_token',
+                        value=access_token,
+                        max_age=int(access_exp.total_seconds()),
+                        httponly=True,
+                        secure=secure,
+                        samesite=samesite,
+                        path='/',
+                        domain=domain,
+                    )
+                
+                # Clean response data
+                response.data = {
+                    'message': 'Token refreshed successfully',
+                    'debug': {
+                        'cookies_updated': True,
+                    } if settings.DEBUG else {}
+                }
+            
+            return response
+            
+        except (TokenError, InvalidToken) as e:
+            print(f"Token error: {e}")
+            # Clear invalid cookies
+            response = Response(
+                {'detail': f'Invalid or expired refresh token: {str(e)}'}, 
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+            clear_auth_cookies(response)
+            return response
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            print(f"Error type: {type(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {'detail': f'Unexpected error: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+    
+
+
+
+class CurrentUserView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self,request):
+        serializer = CustomUserSerializer(request.user)
+        return Response({'user':serializer.data})
+        
+    
+
+
+
 
 
 class UserProfileViewSet(ModelViewSet):
@@ -86,6 +278,7 @@ class FriendshipViewSet(ModelViewSet):
     serializer_class = FriendshipSerializer
     
 class OTPVerifyVeiw(APIView):
+    permission_classes = [AllowAny]
     def post(self,request):
         email = request.data.get('email')
         code = request.data.get('code')
@@ -125,10 +318,16 @@ class ResendOTPView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
         
-class LogoutView(APIView):
-    def post(self, request):
-        response = Response({"detail": "Logged out successfully."}, status=status.HTTP_200_OK)
-        response.delete_cookie("access_token")
-        response.delete_cookie("refresh_token")
+class LogoutView(TokenRefreshView):
+    """Custom logout view that clears cookies"""
+    
+    def post(self, request, *args, **kwargs):
+        response = Response(
+            {'message': 'Logged out successfully'}, 
+            status=status.HTTP_200_OK
+        )
+        
+        # Clear authentication cookies
+        clear_auth_cookies(response)
+        
         return response
-
