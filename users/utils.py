@@ -4,6 +4,7 @@ import random
 from django.core.mail import send_mail
 from django.conf import settings
 from .models import OTP  # Adjust import path
+import cloudinary.uploader
 
 def generate_and_send_otp(user):
     code = f"{random.randint(100000, 999999)}"
@@ -78,3 +79,35 @@ def clear_auth_cookies(response):
         samesite=samesite,
         domain=domain
     )
+    
+def upload_avatar_to_cloudinary(file, folder='avatars'):
+    """
+    Uploads an avatar image to Cloudinary and returns the URL.
+    """
+    print("=== upload_avatar_to_cloudinary called ===")
+    if not file:
+        print("No file provided to upload_avatar_to_cloudinary.")
+        return None
+
+    print(f"Uploading file: {file} to Cloudinary in folder: {folder}")
+    try:
+        response = cloudinary.uploader.upload(
+            file,
+            folder=folder,
+            allowed_formats=['jpg', 'jpeg', 'png'],
+            overwrite=True,
+            resource_type='image',
+            transformation=[
+                {'width': 200, 'height': 200, 'crop': 'fill', 'gravity': 'face'}
+            ]
+        )
+        print("Cloudinary upload response:", response)
+        url = response.get('secure_url')
+        if url:
+            print("Successfully uploaded to Cloudinary. URL:", url)
+        else:
+            print("Upload to Cloudinary succeeded but no URL returned.")
+        return url
+    except Exception as e:
+        print(f"Error uploading to Cloudinary: {e}")
+        return None

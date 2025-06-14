@@ -5,6 +5,7 @@ from django.conf import settings
 from .models import *
 from .serializers import *
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.views import TokenObtainPairView,TokenRefreshView
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
@@ -89,66 +90,7 @@ class CustomLoginView(TokenObtainPairView):
         
     
 
-# class CustomTokenRefreshView(TokenRefreshView):
-#     """Custom token refresh view that works with cookies"""
-    
-#     def post(self, request, *args, **kwargs):
-#         # Try to get refresh token from cookie if not in request body
-#         if 'refresh' not in request.data:
-#             refresh_token = request.COOKIES.get('refresh_token')
-#             if refresh_token:
-#                 # Create a mutable copy of request.data
-#                 data = request.data.copy()
-#                 data['refresh'] = refresh_token
-#                 request._full_data = data
-        
-#         try:
-#             response = super().post(request, *args, **kwargs)
-            
-#             if response.status_code == 200:
-#                 # Get new tokens
-#                 access_token = response.data.get('access')
-#                 refresh_token = response.data.get('refresh')  # If rotation is enabled
-                
-#                 # Update cookies
-#                 if refresh_token:  # If refresh token rotation is enabled
-#                     set_auth_cookies(response, access_token, refresh_token)
-#                 else:
-#                     # Only update access token cookie
-#                     access_exp = settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME']
-#                     secure = getattr(settings, 'AUTH_COOKIE_SECURE', False)
-#                     samesite = getattr(settings, 'AUTH_COOKIE_SAMESITE', 'Lax')
-#                     domain = getattr(settings, 'AUTH_COOKIE_DOMAIN', None)
-                    
-#                     response.set_cookie(
-#                         key='access_token',
-#                         value=access_token,
-#                         max_age=int(access_exp.total_seconds()),
-#                         httponly=True,
-#                         secure=secure,
-#                         samesite=samesite,
-#                         path='/',
-#                         domain=domain,
-#                     )
-                
-#                 # Clean response data
-#                 response.data = {
-#                     'message': 'Token refreshed successfully',
-#                     'debug': {
-#                         'cookies_updated': True,
-#                     } if settings.DEBUG else {}
-#                 }
-            
-#             return response
-            
-#         except (TokenError, InvalidToken) as e:
-#             # Clear invalid cookies
-#             response = Response(
-#                 {'detail': 'Invalid or expired refresh token'}, 
-#                 status=status.HTTP_401_UNAUTHORIZED
-#             )
-#             clear_auth_cookies(response)
-#             return response
+
     
 class CustomTokenRefreshView(TokenRefreshView):
     """Custom token refresh view that works with cookies"""
@@ -257,6 +199,7 @@ class CurrentUserView(APIView):
     
     def get(self,request):
         serializer = CustomUserSerializer(request.user)
+        print("Current user serializer data:", serializer.data)
         return Response({'user':serializer.data})
         
     
@@ -265,19 +208,21 @@ class CurrentUserView(APIView):
 
 
 
-class UserProfileViewSet(ModelViewSet):
-    queryset = UserProfile.objects.all()
-    serializer_class = UserProfileSerializer
+# class UserProfileViewSet(ModelViewSet):
+#     queryset = UserProfile.objects.all()
+#     serializer_class = UserProfileSerializer
     
 class LanguageViewSet(ModelViewSet):
     queryset = Language.objects.all()
     serializer_class = LanguageSerializer
     
+    
+    
 class FriendshipViewSet(ModelViewSet):
     queryset = Friendship.objects.all()
     serializer_class = FriendshipSerializer
-    
-class OTPVerifyVeiw(APIView):
+
+class OTPVerifyView(APIView):
     permission_classes = [AllowAny]
     def post(self,request):
         email = request.data.get('email')
@@ -331,3 +276,101 @@ class LogoutView(TokenRefreshView):
         clear_auth_cookies(response)
         
         return response
+
+
+class PasswordResetOTPVerifyView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetOTPVerifySerializer(data=request.data)
+        if serializer.is_valid():
+            otp_obj = serializer.validated_data['otp_obj']
+            user = serializer.validated_data['user']
+            otp_obj.is_used = True
+            otp_obj.save()
+            # Optionally, set a flag on user to allow password reset
+            return Response({'message': 'OTP verified successfully. You can now reset your password.'})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class PasswordResetResendOTPView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetResendOTPSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.context['user']
+            generate_and_send_otp(user)
+            return Response({'message': 'OTP resent successfully.'})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def put(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({'message': 'Password reset successful.'})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    
+class CurrentUserProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self,request):
+        try:
+            profile = request.user.userprofile
+        except UserProfile.DoesNotExist:
+            return Response({'error':'Profile not found'},status=status.HTTP_404_NOT_FOUND)
+        serializers = UserProfileSerializer(profile)
+        print("Serializers data:", serializers.data)
+        return Response({'profile':serializers.data})
+
+
+class UpdateUserProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def patch(self, request):
+        try:
+            profile = request.user.userprofile
+        except UserProfile.DoesNotExist:
+            return Response({'error': 'Profile not found'}, status=404)
+        serializer = UserProfileUpdateSerializer(profile, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(UserProfileSerializer(profile).data)
+        return Response(serializer.errors, status=400)
+    
+    def put(self, request):
+        print("=== PUT /profile/update/ called ===")
+        print("Request user:", request.user)
+        print("Request user authenticated:", request.user.is_authenticated)
+        print("Request content-type:", request.content_type)
+        print("Request data:", request.data)
+        print("Request FILES:", request.FILES)
+        try:
+            profile = request.user.userprofile
+            print("Found user profile:", profile)
+        except UserProfile.DoesNotExist:
+            print("UserProfile not found for user:", request.user)
+            return Response({'error': 'Profile not found'}, status=404)
+        serializer = UserProfileUpdateSerializer(profile, data=request.data, partial=True)
+        print("Serializer initialized. Is valid?", serializer.is_valid())
+        if not serializer.is_valid():
+            print("Serializer errors:", serializer.errors)
+            return Response(serializer.errors, status=400)
+        serializer.save()
+        print("Profile updated successfully. New avatar URL:", profile.avatar)
+        return Response({'profile': UserProfileSerializer(profile).data})
+        
+class ProficiencyChoicesView(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        choices = [
+            {'value': choice[0], 'label': choice[1]}
+            for choice in UserLanguage.Proficiency.choices
+        ]
+        return Response(choices, status=status.HTTP_200_OK)
+    
+    

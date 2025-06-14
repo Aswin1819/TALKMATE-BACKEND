@@ -20,7 +20,7 @@ class CustomUser(AbstractUser):
 
 class Language(models.Model):
     name = models.CharField(max_length=50)
-    code = models.CharField(10, max_length=50)
+    code = models.CharField(max_length=2)
     
     
 class UserProfile(models.Model):
@@ -32,8 +32,8 @@ class UserProfile(models.Model):
     unique_id = models.CharField(max_length=10,unique=True,default=generate_unique_id)
     avatar = models.URLField(blank=True,null=True)
     bio = models.TextField(blank=True)
-    native_language = models.ForeignKey(Language,on_delete=models.SET_NULL,null=True,blank=True)
-    learning_languages = models.ManyToManyField(Language,related_name='learners',blank=True)
+    # native_language = models.ForeignKey(Language,on_delete=models.SET_NULL,null=True,blank=True)
+    # learning_languages = models.ManyToManyField(Language,related_name='learners',blank=True)
     status = models.CharField(max_length=20,choices=Status.choices,default=Status.ACTIVE)
     is_premium = models.BooleanField(default=False)
     xp = models.IntegerField(default=0)
@@ -48,7 +48,22 @@ class UserProfile(models.Model):
     def update_level(self):
         self.level = self.xp // 7200 + 1
         self.save()
-        
+
+class UserLanguage(models.Model):
+    class Proficiency(models.TextChoices):
+        BEGINNER = 'beginner', 'Beginner'
+        ELEMENTARY = 'elementary', 'Elementary'
+        INTERMEDIATE = 'intermediate', 'Intermediate'
+        ADVANCED = 'advanced', 'Advanced'
+        NATIVE = 'native', 'Native'
+        FLUENT = 'fluent', 'Fluent'
+
+    user_profile = models.ForeignKey(UserProfile, on_delete=models.CASCADE)
+    language = models.ForeignKey(Language, on_delete=models.CASCADE)
+    is_learning = models.BooleanField(default=True)
+    proficiency = models.CharField(max_length=20, choices=Proficiency.choices)
+
+
     
 class OTP(models.Model):
     user = models.ForeignKey(CustomUser,on_delete=models.CASCADE)
