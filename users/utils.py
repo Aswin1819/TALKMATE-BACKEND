@@ -25,17 +25,92 @@ def generate_and_send_otp(user):
     )
     
 
+# def set_auth_cookies(response, access_token, refresh_token):
+#     """
+#     Utility function to set authentication cookies with development-friendly settings
+#     """
+#     access_exp = settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME']
+#     refresh_exp = settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME']
+
+#     # Get cookie settings from Django settings
+#     secure = getattr(settings, 'AUTH_COOKIE_SECURE', False)
+#     samesite = getattr(settings, 'AUTH_COOKIE_SAMESITE', 'Lax')
+#     domain = getattr(settings, 'AUTH_COOKIE_DOMAIN', None)
+
+#     # Set access token cookie
+#     response.set_cookie(
+#         key='access_token',
+#         value=access_token,
+#         max_age=int(access_exp.total_seconds()),
+#         httponly=True,
+#         secure=secure,
+#         samesite=samesite,
+#         path='/',
+#         domain=domain,
+#     )
+    
+#     # Set refresh token cookie
+#     response.set_cookie(
+#         key='refresh_token',
+#         value=refresh_token,
+#         max_age=int(refresh_exp.total_seconds()),
+#         httponly=True,
+#         secure=secure,
+#         samesite=samesite,
+#         path='/',
+#         domain=domain,
+#     )
+
+
+# def clear_auth_cookies(response):
+#     """Utility function to clear authentication cookies"""
+#     samesite = getattr(settings, 'AUTH_COOKIE_SAMESITE', 'Lax')
+#     domain = getattr(settings, 'AUTH_COOKIE_DOMAIN', None)
+    
+#     response.delete_cookie(
+#         'access_token',
+#         path='/',
+#         samesite=samesite,
+#         domain=domain
+#     )
+#     response.delete_cookie(
+#         'refresh_token',
+#         path='/',
+#         samesite=samesite,
+#         domain=domain
+#     )
+
 def set_auth_cookies(response, access_token, refresh_token):
     """
-    Utility function to set authentication cookies with development-friendly settings
+    Utility function to set authentication cookies with proper cross-origin support
     """
     access_exp = settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME']
     refresh_exp = settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME']
 
     # Get cookie settings from Django settings
-    secure = getattr(settings, 'AUTH_COOKIE_SECURE', False)
-    samesite = getattr(settings, 'AUTH_COOKIE_SAMESITE', 'Lax')
-    domain = getattr(settings, 'AUTH_COOKIE_DOMAIN', None)
+    # secure = getattr(settings, 'AUTH_COOKIE_SECURE', False)
+    # samesite = getattr(settings, 'AUTH_COOKIE_SAMESITE', 'Lax')
+    # domain = getattr(settings, 'AUTH_COOKIE_DOMAIN', None)
+
+    # # Apply environment-specific settings
+    # if settings.DEBUG:
+    #     # Development: Use Lax for same-origin (frontend and backend on localhost)
+    #     secure = False
+    #     samesite = 'Lax'  # Changed from 'None' to 'Lax'
+    # else:
+    #     # Production: Use None with Secure=True for cross-origin
+    #     secure = True
+    #     samesite = 'None'
+    
+    secure = True
+    samesite = 'None'
+    domain = None  # Or your domain if needed
+    
+    print(f"=== COOKIE SETTINGS DEBUG ===")
+    print(f"Secure: {secure}")
+    print(f"SameSite: {samesite}")
+    print(f"Domain: {domain}")
+    print(f"DEBUG mode: {settings.DEBUG}")
 
     # Set access token cookie
     response.set_cookie(
@@ -61,11 +136,30 @@ def set_auth_cookies(response, access_token, refresh_token):
         domain=domain,
     )
 
+    print(f"Cookies set - Access token: {access_token[:20]}..., Refresh token: {refresh_token[:20]}...")
+
 
 def clear_auth_cookies(response):
     """Utility function to clear authentication cookies"""
-    samesite = getattr(settings, 'AUTH_COOKIE_SAMESITE', 'Lax')
-    domain = getattr(settings, 'AUTH_COOKIE_DOMAIN', None)
+    # secure = getattr(settings, 'AUTH_COOKIE_SECURE', False)
+    # samesite = getattr(settings, 'AUTH_COOKIE_SAMESITE', 'Lax')
+    # domain = getattr(settings, 'AUTH_COOKIE_DOMAIN', None)
+    
+    # # Use same settings as set_auth_cookies for consistency
+    # if settings.DEBUG:
+    #     secure = False
+    #     samesite = 'Lax'  # Changed from 'None' to 'Lax'
+    # else:
+    #     secure = True
+    #     samesite = 'None'
+    secure = True
+    samesite = 'None'
+    domain = None  # Or your domain if needed
+    
+    print(f"=== CLEARING COOKIES DEBUG ===")
+    print(f"Secure: {secure}")
+    print(f"SameSite: {samesite}")
+    print(f"Domain: {domain}")
     
     response.delete_cookie(
         'access_token',
@@ -79,6 +173,9 @@ def clear_auth_cookies(response):
         samesite=samesite,
         domain=domain
     )
+
+
+
     
 def upload_avatar_to_cloudinary(file, folder='avatars'):
     """

@@ -71,15 +71,35 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         if not self.user.is_active:
             raise AuthenticationFailed("Your account has been blocked by the admin.")
 
-        # Add user data to response
+           # Get avatar from UserProfile
+        avatar = None
+        followers_count = 0
+        following_count = 0
+        friends_count = 0
+        try:
+            profile = self.user.userprofile
+            avatar = profile.avatar
+            followers_count = profile.followers.count()
+            following_count = profile.following.count()
+            friends_count = Friendship.objects.filter(
+                (Q(from_user=self.user) | Q(to_user=self.user)) & Q(status='accepted')
+            ).count()
+        except UserProfile.DoesNotExist:
+            print("UserProfile does not exist for user:", self.user.id)
+
         data.update({
             'user': {
                 'user_id': self.user.id,
                 'username': self.user.username,
                 'email': self.user.email,
                 'is_verified': self.user.is_verified,
+                'avatar': avatar,
+                'followers_count': followers_count,
+                'following_count': following_count,
+                'friends_count': friends_count,
             }
         })
+
 
         return data
     

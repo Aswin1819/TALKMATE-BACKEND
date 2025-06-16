@@ -35,7 +35,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'rest_framework_simplejwt',  # Add this explicitly
+    'rest_framework_simplejwt', 
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'cloudinary',
     'cloudinary_storage',
@@ -56,7 +57,7 @@ MIDDLEWARE = [
 
 # CORS Configuration
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all origins in debug mode
+# CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all origins in debug mode
 
 if DEBUG:
     CORS_ALLOWED_ORIGINS = [
@@ -64,12 +65,37 @@ if DEBUG:
         "http://127.0.0.1:3000",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:3001",  # Add any other frontend ports you might use
+        "http://127.0.0.1:3001",
     ]
 else:
     CORS_ALLOWED_ORIGINS = [
         # Add your production frontend URLs here
         # "https://yourdomain.com",
     ]
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+# Allow specific methods
+CORS_ALLOWED_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_EXPOSE_HEADERS = [
+    'content-type',
+    'x-csrftoken',
+]
+CORS_PREFLIGHT_MAX_AGE = 86400
+
 
 # CORS Headers
 CORS_ALLOWED_HEADERS = [
@@ -179,29 +205,57 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='TalkMate <noreply@talkmate.com>')
 
-# Cookie Configuration - FIXED for cross-origin issues
-if DEBUG:
-    # Development settings - Use None for cross-origin requests
-    AUTH_COOKIE_SECURE = False
-    AUTH_COOKIE_SAMESITE = 'Lax'  # Back to Lax for development
-    AUTH_COOKIE_DOMAIN = None     # Let browser handle domain
-    SESSION_COOKIE_SECURE = False
-    SESSION_COOKIE_SAMESITE = 'Lax'
-    CSRF_COOKIE_SECURE = False
-    CSRF_COOKIE_SAMESITE = 'Lax'
-    CSRF_COOKIE_HTTPONLY = False
-else:
-    # Production settings
-    AUTH_COOKIE_SECURE = True
-    AUTH_COOKIE_SAMESITE = 'None'
-    SESSION_COOKIE_SECURE = True
-    SESSION_COOKIE_SAMESITE = 'None'
-    CSRF_COOKIE_SECURE = True
-    CSRF_COOKIE_SAMESITE = 'None'
-    CSRF_COOKIE_HTTPONLY = True
+# # Cookie Configuration - FIXED for cross-origin issues
+# if DEBUG:
+#     # Development settings - Use None for cross-origin requests
+#     AUTH_COOKIE_SECURE = False
+#     AUTH_COOKIE_SAMESITE = 'Lax'  # Back to Lax for development
+#     AUTH_COOKIE_DOMAIN = None     # Let browser handle domain
+#     SESSION_COOKIE_SECURE = False
+#     SESSION_COOKIE_SAMESITE = 'Lax'
+#     CSRF_COOKIE_SECURE = False
+#     CSRF_COOKIE_SAMESITE = 'Lax'
+#     CSRF_COOKIE_HTTPONLY = False
+# else:
+#     # Production settings
+#     AUTH_COOKIE_SECURE = True
+#     AUTH_COOKIE_SAMESITE = 'None'
+#     SESSION_COOKIE_SECURE = True
+#     SESSION_COOKIE_SAMESITE = 'None'
+#     CSRF_COOKIE_SECURE = True
+#     CSRF_COOKIE_SAMESITE = 'None'
+#     CSRF_COOKIE_HTTPONLY = True
+
+# Additional security settings for production
+# if not DEBUG:
+#     SECURE_BROWSER_XSS_FILTER = True
+#     SECURE_CONTENT_TYPE_NOSNIFF = True
+#     X_FRAME_OPTIONS = 'DENY'
+
+# if DEBUG:
+#     # Development settings - Use Lax for same-origin requests
+#     AUTH_COOKIE_SECURE = False          
+#     AUTH_COOKIE_SAMESITE = 'Lax'        # Changed from 'None' to 'Lax'
+#     AUTH_COOKIE_DOMAIN = None           
+#     SESSION_COOKIE_SECURE = False
+#     SESSION_COOKIE_SAMESITE = 'Lax'     # Changed from 'None' to 'Lax'
+#     CSRF_COOKIE_SECURE = False
+#     CSRF_COOKIE_SAMESITE = 'Lax'        # Changed from 'None' to 'Lax'
+#     CSRF_COOKIE_HTTPONLY = False
+# else:
+    # Production settings - Use None for cross-origin with Secure=True
+AUTH_COOKIE_SECURE = True           
+AUTH_COOKIE_SAMESITE = 'None'       
+AUTH_COOKIE_DOMAIN = None           
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_HTTPONLY = True
 
 # Additional security settings for production
 if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
+    

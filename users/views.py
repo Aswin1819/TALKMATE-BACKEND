@@ -49,16 +49,21 @@ class CustomLoginView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
     def post(self, request, *args, **kwargs):
+        print("=== CustomLoginView POST called ===")
+        print("Request data:", request.data)
         serializer = self.get_serializer(data=request.data)
 
         try:
             serializer.is_valid(raise_exception=True)
+            print("Serializer valid. User:", serializer.user)
+            print("Serializer data:", serializer.validated_data)
         except AuthenticationFailed as e:
             return Response(
                 {'detail': str(e)}, 
                 status=status.HTTP_403_FORBIDDEN
             )
         except Exception as e:
+            print("Serializer error:", str(e))
             return Response(
                 {'detail': 'Invalid credentials or user inactive'}, 
                 status=status.HTTP_401_UNAUTHORIZED
@@ -69,7 +74,7 @@ class CustomLoginView(TokenObtainPairView):
         access_token = validated_data.get('access')
         refresh_token = validated_data.get('refresh')
         user_data = validated_data.get('user')
-
+        
         # Create response
         response_data = {
             'message': 'Login successful',
@@ -145,8 +150,8 @@ class CustomTokenRefreshView(TokenRefreshView):
                 else:
                     # Only update access token cookie
                     access_exp = settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME']
-                    secure = getattr(settings, 'AUTH_COOKIE_SECURE', False)
-                    samesite = getattr(settings, 'AUTH_COOKIE_SAMESITE', 'Lax')
+                    secure = False if settings.DEBUG else getattr(settings, 'AUTH_COOKIE_SECURE', True)
+                    samesite = 'None' if settings.DEBUG else getattr(settings, 'AUTH_COOKIE_SAMESITE', 'None')
                     domain = getattr(settings, 'AUTH_COOKIE_DOMAIN', None)
                     
                     response.set_cookie(
