@@ -32,8 +32,6 @@ class UserProfile(models.Model):
     unique_id = models.CharField(max_length=10,unique=True,default=generate_unique_id)
     avatar = models.URLField(blank=True,null=True)
     bio = models.TextField(blank=True)
-    # native_language = models.ForeignKey(Language,on_delete=models.SET_NULL,null=True,blank=True)
-    # learning_languages = models.ManyToManyField(Language,related_name='learners',blank=True)
     status = models.CharField(max_length=20,choices=Status.choices,default=Status.ACTIVE)
     is_premium = models.BooleanField(default=False)
     xp = models.IntegerField(default=0)

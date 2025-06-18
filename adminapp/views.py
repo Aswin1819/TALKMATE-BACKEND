@@ -2,10 +2,11 @@ from rest_framework import status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from users.models import CustomUser
-from .serializers import AdminLoginSerializer, UserListSerializer
+from users.models import CustomUser, UserProfile
+from .serializers import AdminLoginSerializer, UserListSerializer, UserProfileDetailSerializer
 from rest_framework.permissions import IsAuthenticated
 from users.utils import set_auth_cookies, clear_auth_cookies
+from django.shortcuts import get_object_or_404
 
 class AdminLoginView(TokenObtainPairView):
     serializer_class = AdminLoginSerializer
@@ -70,4 +71,14 @@ class AdminUserListView(APIView):
 
         users = CustomUser.objects.filter(is_superuser=False)
         serializer = UserListSerializer(users, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class AdminUserProfileDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id):
+        if not request.user.is_superuser:
+            return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+        user_profile = get_object_or_404(UserProfile, user__id=user_id)
+        serializer = UserProfileDetailSerializer(user_profile)
         return Response(serializer.data, status=status.HTTP_200_OK)
