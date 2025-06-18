@@ -75,6 +75,7 @@ class CustomLoginView(TokenObtainPairView):
         refresh_token = validated_data.get('refresh')
         user_data = validated_data.get('user')
         
+        
         # Create response
         response_data = {
             'message': 'Login successful',
@@ -89,7 +90,11 @@ class CustomLoginView(TokenObtainPairView):
         response = Response(response_data, status=status.HTTP_200_OK)
         
         # Set authentication cookies
-        set_auth_cookies(response, access_token, refresh_token)
+        set_auth_cookies(response, access_token,
+                        refresh_token,
+                        access_cookie='access_token',
+                        refresh_cookie='refresh_token'
+                    )
 
         return response
         
@@ -377,5 +382,4 @@ class ProficiencyChoicesView(APIView):
             for choice in UserLanguage.Proficiency.choices
         ]
         return Response(choices, status=status.HTTP_200_OK)
-    
-    
+

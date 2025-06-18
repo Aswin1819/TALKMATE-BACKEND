@@ -80,27 +80,13 @@ def generate_and_send_otp(user):
 #         domain=domain
 #     )
 
-def set_auth_cookies(response, access_token, refresh_token):
+def set_auth_cookies(response, access_token, refresh_token , access_cookie='access_token', refresh_cookie='refresh_token'):
     """
     Utility function to set authentication cookies with proper cross-origin support
     """
     access_exp = settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME']
     refresh_exp = settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME']
 
-    # Get cookie settings from Django settings
-    # secure = getattr(settings, 'AUTH_COOKIE_SECURE', False)
-    # samesite = getattr(settings, 'AUTH_COOKIE_SAMESITE', 'Lax')
-    # domain = getattr(settings, 'AUTH_COOKIE_DOMAIN', None)
-
-    # # Apply environment-specific settings
-    # if settings.DEBUG:
-    #     # Development: Use Lax for same-origin (frontend and backend on localhost)
-    #     secure = False
-    #     samesite = 'Lax'  # Changed from 'None' to 'Lax'
-    # else:
-    #     # Production: Use None with Secure=True for cross-origin
-    #     secure = True
-    #     samesite = 'None'
     
     secure = True
     samesite = 'None'
@@ -114,7 +100,7 @@ def set_auth_cookies(response, access_token, refresh_token):
 
     # Set access token cookie
     response.set_cookie(
-        key='access_token',
+        key=access_cookie,
         value=access_token,
         max_age=int(access_exp.total_seconds()),
         httponly=True,
@@ -126,7 +112,7 @@ def set_auth_cookies(response, access_token, refresh_token):
     
     # Set refresh token cookie
     response.set_cookie(
-        key='refresh_token',
+        key=refresh_cookie,
         value=refresh_token,
         max_age=int(refresh_exp.total_seconds()),
         httponly=True,

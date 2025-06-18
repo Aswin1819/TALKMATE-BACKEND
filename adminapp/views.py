@@ -1,14 +1,65 @@
-
 from rest_framework import status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from users.models import CustomUser
 from .serializers import AdminLoginSerializer, UserListSerializer
 from rest_framework.permissions import IsAuthenticated
+from users.utils import set_auth_cookies, clear_auth_cookies
 
 class AdminLoginView(TokenObtainPairView):
     serializer_class = AdminLoginSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+
+        validated_data = serializer.validated_data
+        access_token = validated_data.get('access')
+        refresh_token = validated_data.get('refresh')
+
+        response = Response({
+            'message': 'Admin login successful',
+            'admin': {
+                'user_id': validated_data.get('user_id'),
+                'username': validated_data.get('username'),
+                'email': validated_data.get('email'),
+                'is_superuser': validated_data.get('is_superuser'),
+            }
+        }, status=status.HTTP_200_OK)
+
+        set_auth_cookies(
+            response,
+            access_token,
+            refresh_token,
+            access_cookie='admin_access_token',
+            refresh_cookie='admin_refresh_token'
+        )
+        return response
+
+# For refresh:
+class AdminTokenRefreshView(TokenRefreshView):
+    def post(self, request, *args, **kwargs):
+        # Get refresh token from cookie if not in request.data
+        if 'refresh' not in request.data:
+            refresh_token = request.COOKIES.get('admin_refresh_token')
+            if refresh_token:
+                request.data['refresh'] = refresh_token
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            access_token = response.data.get('access')
+            refresh_token = response.data.get('refresh')
+            set_auth_cookies(
+                response,
+                access_token,
+                refresh_token,
+                access_cookie='admin_access_token',
+                refresh_cookie='admin_refresh_token'
+            )
+        return response
 
 class AdminUserListView(APIView):
     permission_classes = [IsAuthenticated]

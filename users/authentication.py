@@ -14,9 +14,12 @@ class CookieJWTAuthentication(JWTAuthentication):
             return header_auth
         
         # If no header auth, try cookie auth
-        raw_token = request.COOKIES.get('access_token')
+        raw_token = (
+            request.COOKIES.get('access_token') or
+            request.COOKIES.get('admin_access_token')
+        )
         if raw_token is None:
-            print(f"No access_token cookie found. Available cookies: {list(request.COOKIES.keys())}")
+            print(f"No access_token or admin_access_token cookie found. Available cookies: {list(request.COOKIES.keys())}")
             return None
             
         print(f"Found access token in cookie: {raw_token[:20]}...")
