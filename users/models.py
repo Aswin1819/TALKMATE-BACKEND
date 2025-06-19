@@ -93,5 +93,24 @@ class Friendship(models.Model):
 
 
     
+class UserSettings(models.Model):
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
     
+    # UI toggles
+    dark_mode = models.BooleanField(default=True)
+    email_notifications = models.BooleanField(default=True)
+    practice_reminders = models.BooleanField(default=True)
+    room_interest_notifications = models.BooleanField(default=True)
+    browser_notifications = models.BooleanField(default=True)
     
+    # Visibility & activity settings
+    public_profile = models.BooleanField(default=True)
+    show_online_status = models.BooleanField(default=True)
+    
+    # Language & timezone
+    language = models.ForeignKey('Language', on_delete=models.SET_NULL, null=True, blank=True)
+    timezone = models.CharField(max_length=50, default='UTC')
+    is_deleted = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.user.username}'s settings"

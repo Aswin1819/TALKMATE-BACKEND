@@ -7,6 +7,9 @@ from .utils import upload_avatar_to_cloudinary
 from rest_framework.exceptions import AuthenticationFailed
 import re
 from django.db.models import Q
+from django.contrib.auth import authenticate
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 
 
 
@@ -70,6 +73,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         
         if not self.user.is_active:
             raise AuthenticationFailed("Your account has been blocked by the admin.")
+        
+        if self.user.is_superuser:
+            raise AuthenticationFailed("Superusers cannot log in through this endpoint.")
 
            # Get avatar from UserProfile
         avatar = None
@@ -302,3 +308,67 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
         instance.save()
         print("Instance after save. Avatar URL:", instance.avatar)
         return instance
+
+
+
+class UserSettingsSerializer(serializers.ModelSerializer):
+    language_name = serializers.CharField(source='language.name', read_only=True)
+    language_code = serializers.CharField(source='language.code', read_only=True)
+    
+    class Meta:
+        model = UserSettings
+        fields = [
+            'id',
+            'dark_mode',
+            'email_notifications', 
+            'practice_reminders',
+            'room_interest_notifications',
+            'browser_notifications',
+            'public_profile',
+            'show_online_status',
+            'language',
+            'language_name',
+            'language_code',
+            'timezone'
+        ]
+        
+    def validate(self, data):
+        # If email_notifications is False, set dependent notifications to False
+        if not data.get('email_notifications', True):
+            data['practice_reminders'] = False
+            data['room_interest_notifications'] = False
+        return data
+    
+
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True)
+    confirm_password = serializers.CharField(required=True)
+    
+    def validate_current_password(self, value):
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("Current password is incorrect.")
+        return value
+    
+    def validate_new_password(self, value):
+        try:
+            validate_password(value, self.context['request'].user)
+        except ValidationError as e:
+            raise serializers.ValidationError(list(e.messages))
+        return value
+    
+    def validate(self, data):
+        if data['new_password'] != data['confirm_password']:
+            raise serializers.ValidationError("New passwords do not match.")
+        
+        if data['current_password'] == data['new_password']:
+            raise serializers.ValidationError("New password must be different from current password.")
+        
+        return data
+    
+    def save(self):
+        user = self.context['request'].user
+        user.set_password(self.validated_data['new_password'])
+        user.save()
+        return user

@@ -383,3 +383,71 @@ class ProficiencyChoicesView(APIView):
         ]
         return Response(choices, status=status.HTTP_200_OK)
 
+
+
+class UserSettingsView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get current user's settings"""
+        try:
+            user_settings = UserSettings.objects.get(user=request.user)
+        except UserSettings.DoesNotExist:
+            # Create default settings if they don't exist
+            user_settings = UserSettings.objects.create(user=request.user)
+        
+        serializer = UserSettingsSerializer(user_settings)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def put(self, request):
+        """Update user settings"""
+        try:
+            user_settings = UserSettings.objects.get(user=request.user)
+        except UserSettings.DoesNotExist:
+            user_settings = UserSettings.objects.create(user=request.user)
+        
+        serializer = UserSettingsSerializer(user_settings, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+
+class DeleteAccountView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """Mark user account as deleted (soft delete)"""
+        user = request.user
+        
+        # Mark user settings as deleted
+        try:
+            user_settings = UserSettings.objects.get(user=user)
+            user_settings.is_deleted = True
+            user_settings.save()
+        except UserSettings.DoesNotExist:
+            pass
+        
+        # You might want to add additional cleanup logic here
+        # For now, we'll just mark the user as inactive
+        user.is_active = False
+        user.save()
+        
+        return Response(
+            {'message': 'Account deleted successfully'}, 
+            status=status.HTTP_200_OK
+        )
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """Change user password"""
+        serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {'message': 'Password changed successfully'}, 
+                status=status.HTTP_200_OK
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

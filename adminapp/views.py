@@ -82,3 +82,27 @@ class AdminUserProfileDetailView(APIView):
         user_profile = get_object_or_404(UserProfile, user__id=user_id)
         serializer = UserProfileDetailSerializer(user_profile)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class AdminUserStatusUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id):
+        if not request.user.is_superuser:
+            return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+        user_profile = get_object_or_404(UserProfile, user__id=user_id)
+        user = user_profile.user
+        action = request.data.get('action')
+        if action == 'banned':
+            user_profile.status = 'banned'
+            user.is_active = False
+            user_profile.save()
+            user.save()
+            return Response({"detail": "User banned."}, status=status.HTTP_200_OK)
+        elif action == 'active':
+            user_profile.status = 'active'
+            user.is_active = True
+            user_profile.save()
+            user.save()
+            return Response({"detail": "User unbanned."}, status=status.HTTP_200_OK)
+        else:
+            return Response({"detail": "Invalid action."}, status=status.HTTP_400_BAD_REQUEST)

@@ -27,6 +27,12 @@ urlpatterns = [
     path('profile/', CurrentUserProfileView.as_view(), name='current-user-profile'),
     path('profile/update/', UpdateUserProfileView.as_view(), name='update-profile'),
     path('proficiency-choices/', ProficiencyChoicesView.as_view(), name='proficiency-choices'),
+    
+    path('settings/', UserSettingsView.as_view(), name='user-settings'),
+    path('settings/delete-account/', DeleteAccountView.as_view(), name='delete-account'),
+    path('settings/change-password/', ChangePasswordView.as_view(), name='change-password'),
+    #languages/
+    
 
     # other user routes...
 ]
