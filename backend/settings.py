@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'cloudinary_storage',
     'users',
     'adminapp',
+    'rooms',
 ]
 
 MIDDLEWARE = [
