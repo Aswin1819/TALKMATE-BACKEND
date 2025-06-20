@@ -3,9 +3,7 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.contrib.auth.models import AnonymousUser
 
 class CookieJWTAuthentication(JWTAuthentication):
-    """
-    Custom JWT authentication that reads tokens from cookies
-    """
+
     
     def authenticate(self, request):
         # First try the default method (Authorization header)

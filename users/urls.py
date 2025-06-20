@@ -16,6 +16,7 @@ urlpatterns = [
     path('',include(router.urls)),
     path('login/', CustomLoginView.as_view(), name='custom_token_obtain_pair'),
     path('token/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
+    path('google-login/', GoogleLoginView.as_view(), name='google_login'),
     path('register/',RegisterView.as_view(),name='register'),
     path('verify-otp/',OTPVerifyView.as_view(),name='verify_otp'),
     path('resend-otp/',ResendOTPView.as_view(),name='resend-otp'),

@@ -10,6 +10,7 @@ from django.db.models import Q
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from rest_framework_simplejwt.tokens import RefreshToken
 
 
 
@@ -26,7 +27,6 @@ class CustomUserSerializer(serializers.ModelSerializer):
     def get_profile_summary(self, obj):
         try:
             profile = obj.userprofile
-            # Friends count: count of accepted friendships where user is from_user or to_user
             friends_count = Friendship.objects.filter(
                 (Q(from_user=obj) | Q(to_user=obj)) & Q(status='accepted')
             ).count()
@@ -48,6 +48,59 @@ class CustomUserSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['password'] = make_password(validated_data['password'])
         return super().create(validated_data)
+
+
+class GoogleLoginSerializer(serializers.Serializer):
+    user = serializers.HiddenField(default=None)
+    
+    def validate(self,attrs):
+        user = self.context['user']
+        
+        if not user.is_active:
+            raise serializers.ValidationError('Your account has been deactivated')
+        if not user.is_verified:
+            raise serializers.ValidationError('Your email is not verifeid')
+        if user.is_superuser:
+            raise serializers.ValidationError('Superusers cannot log in this way')
+        
+        refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
+        refresh_token = str(refresh)
+        
+        avatar = None
+        followers_count = 0
+        following_count = 0
+        friends_count = 0
+        
+        try:
+            profile=user.userprofile
+            avatar=profile.avatar
+            followers_count=profile.followers.count()
+            following_count=profile.following.count()
+            friends_count=Friendship.objects.filter(
+                (Q(from_user=user) | Q(to_user=user)) & Q(status='accepted')
+            ).count()
+        except UserProfile.DoesNotExist:
+            pass
+        
+        return {
+            'access':access_token,
+            'refresh':refresh_token,
+            'user': {
+                'user_id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'is_verified': user.is_verified,
+                'avatar': avatar,
+                'followers_count': followers_count,
+                'following_count': following_count,
+                'friends_count': friends_count,
+            }
+        }
+        
+
+
+
 
         
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -77,7 +130,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         if self.user.is_superuser:
             raise AuthenticationFailed("Superusers cannot log in through this endpoint.")
 
-           # Get avatar from UserProfile
+        # Get avatar from UserProfile
         avatar = None
         followers_count = 0
         following_count = 0
@@ -105,8 +158,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 'friends_count': friends_count,
             }
         })
-
-
         return data
     
 class LanguageSerializer(serializers.ModelSerializer):
@@ -245,7 +296,6 @@ class ResetPasswordSerializer(serializers.Serializer):
         except CustomUser.DoesNotExist:
             raise serializers.ValidationError("User not found.")
 
-        # Optionally, check if user has verified OTP for reset (implement as needed)
         data['user'] = user
         return data
 
@@ -333,7 +383,6 @@ class UserSettingsSerializer(serializers.ModelSerializer):
         ]
         
     def validate(self, data):
-        # If email_notifications is False, set dependent notifications to False
         if not data.get('email_notifications', True):
             data['practice_reminders'] = False
             data['room_interest_notifications'] = False

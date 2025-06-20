@@ -14,6 +14,82 @@ from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
 from rest_framework.permissions import AllowAny
 from .utils import generate_and_send_otp,set_auth_cookies,clear_auth_cookies
+from django.contrib.auth import get_user_model
+from google.oauth2 import id_token
+from google.auth.transport import requests
+from decouple import config
+User = get_user_model()
+
+  
+class GoogleLoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        id_token_str = request.data.get('id_token')
+
+        if not id_token_str:
+            return Response({'error': 'No token provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            GOOGLE_CLIENT_ID = config('GOOGLE_CLIENT_ID')
+            idinfo = id_token.verify_oauth2_token(id_token_str, requests.Request(), GOOGLE_CLIENT_ID)
+
+            if idinfo['aud'] != GOOGLE_CLIENT_ID:
+                raise AuthenticationFailed('Invalid audience')
+
+            email = idinfo.get('email')
+            name = idinfo.get('given_name')[:5] if idinfo.get('given_name') else 'User'
+
+            user, created = User.objects.get_or_create(
+                email=email,
+                defaults={
+                    'username': name,
+                    'is_active': True,
+                    'is_verified': True,
+                }
+            )
+
+            # Use serializer to generate token and data
+            serializer = GoogleLoginSerializer(data={}, context={'user': user})
+            serializer.is_valid(raise_exception=True)
+            validated_data = serializer.validated_data
+
+            access_token = validated_data['access']
+            refresh_token = validated_data['refresh']
+
+            response = Response({
+                'message': 'Login successful',
+                'user': validated_data['user'],
+                'debug': {
+                    'access_preview': access_token[:20] + "...",
+                    'refresh_preview': refresh_token[:20] + "...",
+                } if settings.DEBUG else {}
+            })
+
+            set_auth_cookies(response, access_token, refresh_token)
+            return response
+
+        except ValueError as e:
+            return Response({'error': f'Invalid token: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+        except AuthenticationFailed as e:
+            return Response({'error': str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -80,7 +156,6 @@ class CustomLoginView(TokenObtainPairView):
         response_data = {
             'message': 'Login successful',
             'user': user_data,
-            # Include tokens in response for debugging
             'debug': {
                 'cookies_set': True,
                 'access_token_preview': access_token[:20] + '...' if access_token else None,
@@ -119,7 +194,6 @@ class CustomTokenRefreshView(TokenRefreshView):
             print(f"Refresh token from cookie: {refresh_token}")
             
             if refresh_token:
-                # Create a mutable copy of request.data
                 if hasattr(request, '_mutable'):
                     request.data._mutable = True
                     
@@ -266,7 +340,7 @@ class ResendOTPView(APIView):
         if serializer.is_valid():
             user = serializer.context['user']
             
-            generate_and_send_otp(user)  # ✅ reuse the helper function
+            generate_and_send_otp(user)  
 
             return Response({"message": "OTP sent successfully."}, status=status.HTTP_200_OK)
 
@@ -281,8 +355,7 @@ class LogoutView(TokenRefreshView):
             {'message': 'Logged out successfully'}, 
             status=status.HTTP_200_OK
         )
-        
-        # Clear authentication cookies
+ 
         clear_auth_cookies(response)
         
         return response
@@ -427,9 +500,7 @@ class DeleteAccountView(APIView):
             user_settings.save()
         except UserSettings.DoesNotExist:
             pass
-        
-        # You might want to add additional cleanup logic here
-        # For now, we'll just mark the user as inactive
+
         user.is_active = False
         user.save()
         
@@ -451,3 +522,9 @@ class ChangePasswordView(APIView):
                 status=status.HTTP_200_OK
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    
+
+
+
+

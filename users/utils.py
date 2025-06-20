@@ -122,7 +122,7 @@ def set_auth_cookies(response, access_token, refresh_token , access_cookie='acce
         domain=domain,
     )
 
-    print(f"Cookies set - Access token: {access_token[:20]}..., Refresh token: {refresh_token[:20]}...")
+    print(f"Cookies set - {access_cookie}: {access_token[:20]}..., {refresh_cookie}: {refresh_token[:20]}...")
 
 
 def clear_auth_cookies(response):
