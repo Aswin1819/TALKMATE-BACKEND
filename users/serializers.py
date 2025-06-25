@@ -71,10 +71,12 @@ class GoogleLoginSerializer(serializers.Serializer):
         followers_count = 0
         following_count = 0
         friends_count = 0
+        level = 0
         
         try:
             profile=user.userprofile
             avatar=profile.avatar
+            level=profile.level
             followers_count=profile.followers.count()
             following_count=profile.following.count()
             friends_count=Friendship.objects.filter(
@@ -92,6 +94,7 @@ class GoogleLoginSerializer(serializers.Serializer):
                 'email': user.email,
                 'is_verified': user.is_verified,
                 'avatar': avatar,
+                'level': level,
                 'followers_count': followers_count,
                 'following_count': following_count,
                 'friends_count': friends_count,
@@ -135,9 +138,11 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         followers_count = 0
         following_count = 0
         friends_count = 0
+        level = 0
         try:
             profile = self.user.userprofile
             avatar = profile.avatar
+            level = profile.level
             followers_count = profile.followers.count()
             following_count = profile.following.count()
             friends_count = Friendship.objects.filter(
@@ -153,6 +158,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 'email': self.user.email,
                 'is_verified': self.user.is_verified,
                 'avatar': avatar,
+                'level': level,
                 'followers_count': followers_count,
                 'following_count': following_count,
                 'friends_count': friends_count,

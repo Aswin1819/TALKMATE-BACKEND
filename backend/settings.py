@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'cloudinary',
     'cloudinary_storage',
+    'channels',
     'users',
     'adminapp',
     'rooms',
@@ -206,45 +207,7 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='TalkMate <noreply@talkmate.com>')
 
-# # Cookie Configuration - FIXED for cross-origin issues
-# if DEBUG:
-#     # Development settings - Use None for cross-origin requests
-#     AUTH_COOKIE_SECURE = False
-#     AUTH_COOKIE_SAMESITE = 'Lax'  # Back to Lax for development
-#     AUTH_COOKIE_DOMAIN = None     # Let browser handle domain
-#     SESSION_COOKIE_SECURE = False
-#     SESSION_COOKIE_SAMESITE = 'Lax'
-#     CSRF_COOKIE_SECURE = False
-#     CSRF_COOKIE_SAMESITE = 'Lax'
-#     CSRF_COOKIE_HTTPONLY = False
-# else:
-#     # Production settings
-#     AUTH_COOKIE_SECURE = True
-#     AUTH_COOKIE_SAMESITE = 'None'
-#     SESSION_COOKIE_SECURE = True
-#     SESSION_COOKIE_SAMESITE = 'None'
-#     CSRF_COOKIE_SECURE = True
-#     CSRF_COOKIE_SAMESITE = 'None'
-#     CSRF_COOKIE_HTTPONLY = True
 
-# Additional security settings for production
-# if not DEBUG:
-#     SECURE_BROWSER_XSS_FILTER = True
-#     SECURE_CONTENT_TYPE_NOSNIFF = True
-#     X_FRAME_OPTIONS = 'DENY'
-
-# if DEBUG:
-#     # Development settings - Use Lax for same-origin requests
-#     AUTH_COOKIE_SECURE = False          
-#     AUTH_COOKIE_SAMESITE = 'Lax'        # Changed from 'None' to 'Lax'
-#     AUTH_COOKIE_DOMAIN = None           
-#     SESSION_COOKIE_SECURE = False
-#     SESSION_COOKIE_SAMESITE = 'Lax'     # Changed from 'None' to 'Lax'
-#     CSRF_COOKIE_SECURE = False
-#     CSRF_COOKIE_SAMESITE = 'Lax'        # Changed from 'None' to 'Lax'
-#     CSRF_COOKIE_HTTPONLY = False
-# else:
-    # Production settings - Use None for cross-origin with Secure=True
 AUTH_COOKIE_SECURE = True           
 AUTH_COOKIE_SAMESITE = 'None'       
 AUTH_COOKIE_DOMAIN = None           
@@ -260,3 +223,15 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
     
+# Channels Configuration
+ASGI_APPLICATION = 'backend.asgi.application'
+
+# Channel Layers Configuration (Redis)
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('127.0.0.1', 6379)],
+        },
+    },
+}

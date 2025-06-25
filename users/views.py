@@ -524,7 +524,12 @@ class ChangePasswordView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     
-
+class AccessTokenView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        token = request.COOKIES.get('access_token')
+        return Response({'token':token})    
 
 
 
