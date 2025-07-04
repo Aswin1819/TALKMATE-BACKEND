@@ -36,6 +36,7 @@ class Room(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='live')
+    is_deleted = models.BooleanField(default=False)
 
 class RoomParticipant(models.Model):
     class Role(models.TextChoices):
@@ -52,6 +53,7 @@ class RoomParticipant(models.Model):
 
     is_muted = models.BooleanField(default=False)
     hand_raised = models.BooleanField(default=False)
+    video_enabled = models.BooleanField(default=False)
 
 class Message(models.Model):
     MESSAGE_TYPES = [
@@ -66,3 +68,21 @@ class Message(models.Model):
     message_type = models.CharField(max_length=10, choices=MESSAGE_TYPES, default='text')
     sent_at = models.DateTimeField(auto_now_add=True)
     is_deleted = models.BooleanField(default=False)
+    
+    
+class ReportedRoom(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('resolved', 'Resolved'),
+        ('dismissed', 'Dismissed'),
+    ]
+
+    room = models.ForeignKey(Room, on_delete=models.CASCADE)
+    reported_by = models.ForeignKey(User, related_name='reports_made', on_delete=models.SET_NULL, null=True)
+    reported_user = models.ForeignKey(User, related_name='reports_received', on_delete=models.SET_NULL, null=True)
+    reason = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+
+    def __str__(self):
+        return f"Report on {self.reported_user} by {self.reported_by} in {self.room}"

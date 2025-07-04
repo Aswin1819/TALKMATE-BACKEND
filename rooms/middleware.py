@@ -4,9 +4,7 @@ from urllib.parse import parse_qs
 
 
 class JWTAuthMiddleware(BaseMiddleware):
-    """
-    Custom middleware to authenticate WebSocket connections using JWT tokens
-    """
+
     
     def __init__(self, inner):
         super().__init__(inner)
@@ -24,6 +22,7 @@ class JWTAuthMiddleware(BaseMiddleware):
         if token:
             try:
                 # Validate JWT token
+                # backend include claims in google authentication tokens users
                 access_token = AccessToken(token)
                 user = await self.get_user_from_token(access_token)
                 scope['user'] = user

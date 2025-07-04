@@ -2,11 +2,14 @@ from rest_framework import status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from users.models import CustomUser, UserProfile
-from .serializers import AdminLoginSerializer, UserListSerializer, UserProfileDetailSerializer
+from users.models import CustomUser, UserProfile, Language
+from rooms.models import Room, RoomParticipant, Message, Tag, RoomType
+from .serializers import *
 from rest_framework.permissions import IsAuthenticated
 from users.utils import set_auth_cookies, clear_auth_cookies
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
+ 
 
 class AdminLoginView(TokenObtainPairView):
     serializer_class = AdminLoginSerializer
@@ -106,3 +109,83 @@ class AdminUserStatusUpdateView(APIView):
             return Response({"detail": "User unbanned."}, status=status.HTTP_200_OK)
         else:
             return Response({"detail": "Invalid action."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AdminRoomListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.is_superuser:
+            return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+
+        rooms = Room.objects.filter(
+            is_deleted=False
+        ).select_related(
+            'host', 'room_type', 'language'
+        ).prefetch_related(
+            'participants', 'tags'
+        )
+        serializer = RoomListSerializer(rooms, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    
+    
+class AdminRoomDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, room_id):
+        if not request.user.is_superuser:
+            return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+
+        room = get_object_or_404(
+            Room.objects.select_related('host', 'room_type', 'language').prefetch_related('tags', 'participants'),
+            id=room_id
+        )
+        serializer = RoomDetailSerializer(room)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def delete(self, request, room_id):
+        if not request.user.is_superuser:
+            return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+
+        room = get_object_or_404(Room, id=room_id)
+        room.is_deleted = True
+        room.status = 'ended'
+        room.ended_at = timezone.now()
+        room.save()
+        return Response({"detail": "Room deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+    
+    def patch(self, request, room_id):
+        if not request.user.is_superuser:
+            return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+        room = get_object_or_404(Room, id=room_id)
+        serializer = AdminRoomEditSerializer(room, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            # Return updated details
+            detail_serializer = RoomDetailSerializer(room)
+            return Response(detail_serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    
+    
+    
+
+
+class LanguageListView(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        languages = Language.objects.all()
+        return Response([{'id': l.id, 'name': l.name} for l in languages])
+
+class RoomTypeListView(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        types = RoomType.objects.all()
+        return Response([{'id': t.id, 'name': t.name} for t in types])
+
+class TagListView(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        tags = Tag.objects.all()
+        return Response([{'id': tag.id, 'name': tag.name} for tag in tags])

@@ -1,6 +1,7 @@
 # rooms/views.py
 from rest_framework import generics, status,viewsets
 from rest_framework.permissions import IsAdminUser
+from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -23,7 +24,8 @@ class LiveRoomsListView(generics.ListAPIView):
     def get_queryset(self):
         queryset = Room.objects.filter(
             status='live',
-            is_private=False
+            is_private=False,
+            is_deleted=False
         ).select_related('host', 'room_type', 'language').prefetch_related('tags')
         
         # Filter by language if provided
@@ -45,26 +47,34 @@ class LiveRoomsListView(generics.ListAPIView):
         
         return queryset.order_by('-created_at')
 
-class CreateRoomView(generics.CreateAPIView):
-    """
-    Create a new room
-    """
-    serializer_class = CreateRoomSerializer
+
+
+class CreateRoomView(APIView):
     permission_classes = [IsAuthenticated]
-    
-    def perform_create(self, serializer):
-        room = serializer.save(
-            host=self.request.user,
+
+    def post(self, request):
+        create_serializer = CreateRoomSerializer(data=request.data)
+        create_serializer.is_valid(raise_exception=True)
+
+        # Save Room with additional fields
+        room = create_serializer.save(
+            host=request.user,
             started_at=timezone.now(),
             status='live'
         )
-        
+
         # Add host as participant
         RoomParticipant.objects.create(
-            user=self.request.user,
+            user=request.user,
             room=room,
             role='host'
         )
+
+        # Now return the full room data
+        response_serializer = RoomSerializer(room)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+
 
 class RoomDetailView(generics.RetrieveAPIView):
     """

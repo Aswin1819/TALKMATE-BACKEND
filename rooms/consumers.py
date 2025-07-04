@@ -2,11 +2,14 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.utils import timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 class RoomConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         from django.contrib.auth.models import AnonymousUser
-        from .models import Room, RoomParticipant, Message
+        
         self.room_id = self.scope['url_route']['kwargs']['room_id']
         self.room_group_name = f'room_{self.room_id}'
         self.user = self.scope['user']
@@ -46,7 +49,10 @@ class RoomConsumer(AsyncWebsocketConsumer):
         
         # Send current room state to new user
         await self.send_room_state()
-    
+        
+        # Request audio connections with existing participants
+        await self.request_audio_connections()
+
     async def disconnect(self, close_code):
         if hasattr(self, 'room_group_name'):
             # Remove user from participants
@@ -68,7 +74,7 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 self.room_group_name,
                 self.channel_name
             )
-    
+
     async def receive(self, text_data):
         try:
             data = json.loads(text_data)
@@ -84,14 +90,25 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 await self.handle_ice_candidate(data)
             elif message_type == 'toggle_mute':
                 await self.handle_toggle_mute(data)
+            elif message_type == 'toggle_video':
+                await self.handle_toggle_video(data)
             elif message_type == 'raise_hand':
                 await self.handle_raise_hand(data)
+            elif message_type == 'request_audio_connection':
+                await self.handle_request_audio_connection(data)
+            else:
+                logger.warning(f"Unknown message type: {message_type}")
                 
         except json.JSONDecodeError:
             await self.send(text_data=json.dumps({
                 'error': 'Invalid JSON format'
             }))
-    
+        except Exception as e:
+            logger.error(f"Error handling message: {str(e)}")
+            await self.send(text_data=json.dumps({
+                'error': 'Server error'
+            }))
+
     # Message Handlers
     async def handle_chat_message(self, data):
         message_content = data.get('message', '').strip()
@@ -113,49 +130,52 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 'timestamp': message.sent_at.isoformat()
             }
         )
-    
+
     async def handle_webrtc_offer(self, data):
         target_user = data.get('target_user_id')
         offer = data.get('offer')
         
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {
-                'type': 'webrtc_offer',
-                'from_user_id': self.user.id,
-                'target_user_id': target_user,
-                'offer': offer
-            }
-        )
-    
+        if not target_user or not offer:
+            return
+            
+        # Send only to specific user using their channel
+        await self.send_to_user(target_user, {
+            'type': 'webrtc_offer',
+            'from_user_id': self.user.id,
+            'target_user_id': target_user,
+            'offer': offer
+        })
+
     async def handle_webrtc_answer(self, data):
         target_user = data.get('target_user_id')
         answer = data.get('answer')
         
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {
-                'type': 'webrtc_answer',
-                'from_user_id': self.user.id,
-                'target_user_id': target_user,
-                'answer': answer
-            }
-        )
-    
+        if not target_user or not answer:
+            return
+            
+        # Send only to specific user
+        await self.send_to_user(target_user, {
+            'type': 'webrtc_answer',
+            'from_user_id': self.user.id,
+            'target_user_id': target_user,
+            'answer': answer
+        })
+
     async def handle_ice_candidate(self, data):
         target_user = data.get('target_user_id')
         candidate = data.get('candidate')
         
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {
-                'type': 'ice_candidate',
-                'from_user_id': self.user.id,
-                'target_user_id': target_user,
-                'candidate': candidate
-            }
-        )
-    
+        if not target_user or not candidate:
+            return
+            
+        # Send only to specific user
+        await self.send_to_user(target_user, {
+            'type': 'ice_candidate',
+            'from_user_id': self.user.id,
+            'target_user_id': target_user,
+            'candidate': candidate
+        })
+
     async def handle_toggle_mute(self, data):
         is_muted = data.get('is_muted', False)
         await self.update_participant_mute_status(is_muted)
@@ -168,7 +188,20 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 'is_muted': is_muted
             }
         )
-    
+
+    async def handle_toggle_video(self, data):
+        video_enabled = data.get('video_enabled', False)
+        await self.update_participant_video_status(video_enabled)
+        
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'user_video_toggle',
+                'user_id': self.user.id,
+                'video_enabled': video_enabled
+            }
+        )
+
     async def handle_raise_hand(self, data):
         hand_raised = data.get('hand_raised', False)
         await self.update_participant_hand_status(hand_raised)
@@ -181,84 +214,177 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 'hand_raised': hand_raised
             }
         )
-    
+
+    async def handle_request_audio_connection(self, data):
+        # Get all participants except the requester
+        participants = await self.get_room_participants()
+        
+        for participant in participants:
+            if participant['user_id'] != self.user.id:
+                await self.send_to_user(participant['user_id'], {
+                    'type': 'audio_connection_request',
+                    'from_user_id': self.user.id,
+                    'username': self.user.username
+                })
+
+    # Helper method to send message to specific user
+    async def send_to_user(self, user_id, message):
+        # This is a simplified approach - in production, you might want to track user channels
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                **message,
+                '_target_user_id': user_id  # Internal flag
+            }
+        )
+
+    async def request_audio_connections(self):
+        """Send audio connection requests to existing participants"""
+        participants = await self.get_room_participants()
+        
+        for participant in participants:
+            if participant['user_id'] != self.user.id:
+                await self.send_to_user(participant['user_id'], {
+                    'type': 'audio_connection_request',
+                    'from_user_id': self.user.id,
+                    'username': self.user.username
+                })
+
     # WebSocket Event Handlers (called by group_send)
     async def chat_message(self, event):
-        await self.send(text_data=json.dumps(event))
-    
+        await self.send(text_data=json.dumps({
+            'type': event['type'],
+            'message_id': event['message_id'],
+            'user_id': event['user_id'],
+            'username': event['username'],
+            'message': event['message'],
+            'timestamp': event['timestamp']
+        }))
+
     async def user_joined(self, event):
         await self.send(text_data=json.dumps(event))
-    
+
     async def user_left(self, event):
         await self.send(text_data=json.dumps(event))
-    
+
     async def webrtc_offer(self, event):
         # Only send to target user
-        if event['target_user_id'] == self.user.id:
-            await self.send(text_data=json.dumps(event))
-    
+        target_user_id = event.get('_target_user_id', event.get('target_user_id'))
+        if target_user_id == self.user.id:
+            await self.send(text_data=json.dumps({
+                'type': event['type'],
+                'from_user_id': event['from_user_id'],
+                'target_user_id': event['target_user_id'],
+                'offer': event['offer']
+            }))
+
     async def webrtc_answer(self, event):
         # Only send to target user
-        if event['target_user_id'] == self.user.id:
-            await self.send(text_data=json.dumps(event))
-    
+        target_user_id = event.get('_target_user_id', event.get('target_user_id'))
+        if target_user_id == self.user.id:
+            await self.send(text_data=json.dumps({
+                'type': event['type'],
+                'from_user_id': event['from_user_id'],
+                'target_user_id': event['target_user_id'],
+                'answer': event['answer']
+            }))
+
     async def ice_candidate(self, event):
         # Only send to target user
-        if event['target_user_id'] == self.user.id:
-            await self.send(text_data=json.dumps(event))
-    
+        target_user_id = event.get('_target_user_id', event.get('target_user_id'))
+        if target_user_id == self.user.id:
+            await self.send(text_data=json.dumps({
+                'type': event['type'],
+                'from_user_id': event['from_user_id'],
+                'target_user_id': event['target_user_id'],
+                'candidate': event['candidate']
+            }))
+
     async def user_mute_toggle(self, event):
         await self.send(text_data=json.dumps(event))
-    
+
+    async def user_video_toggle(self, event):
+        await self.send(text_data=json.dumps(event))
+
     async def hand_raised(self, event):
         await self.send(text_data=json.dumps(event))
-    
+
+    async def audio_connection_request(self, event):
+        # Only send to target user
+        target_user_id = event.get('_target_user_id')
+        if target_user_id == self.user.id:
+            await self.send(text_data=json.dumps({
+                'type': event['type'],
+                'from_user_id': event['from_user_id'],
+                'username': event['username']
+            }))
+
     # Database Operations
     @database_sync_to_async
     def check_room_access(self):
         from .models import Room, RoomParticipant
-
         try:
             room = Room.objects.get(id=self.room_id, status='live')
             
             # Check if room is private and needs password
             if room.is_private:
-                # You'll need to handle password validation here
-                # For now, assume public rooms only
+                #  handle password validation here
                 pass
-            
+                
             # Check max participants
             current_participants = RoomParticipant.objects.filter(
-                room=room, 
+                room=room,
                 left_at__isnull=True
             ).count()
             
             if current_participants >= room.max_participants:
                 return False
-            
+                
             return True
-            
         except Room.DoesNotExist:
             return False
-    
+
     @database_sync_to_async
     def add_participant(self):
         from .models import Room, RoomParticipant
+        from django.utils import timezone
+
         room = Room.objects.get(id=self.room_id)
-        participant, created = RoomParticipant.objects.get_or_create(
+
+        # Try to find an existing (inactive) participant
+        participant = RoomParticipant.objects.filter(
             user=self.user,
-            room=room,
-            left_at__isnull=True,
-            defaults={'role': 'participant'}
-        )
-        
-        # If user is the host, update role
-        if room.host == self.user:
+            room=room
+        ).order_by('-joined_at').first()
+
+        if participant:
+            # If participant had left earlier, rejoin
+            if participant.left_at is not None:
+                participant.left_at = None
+                participant.joined_at = timezone.now()
+                participant.is_muted = False
+                participant.hand_raised = False
+                participant.video_enabled = False
+                participant.save()
+        else:
+            # Create new participant record
+            participant = RoomParticipant.objects.create(
+                user=self.user,
+                room=room,
+                role='participant',
+                is_muted=False,
+                hand_raised=False,
+                video_enabled=False
+            )
+
+        # If this user is the host of the room, assign role
+        if room.host == self.user and participant.role != 'host':
             participant.role = 'host'
             participant.save()
-        
+
         return participant
-    
+
+
     @database_sync_to_async
     def remove_participant(self):
         from .models import Room, RoomParticipant
@@ -272,10 +398,11 @@ class RoomConsumer(AsyncWebsocketConsumer):
             participant.save()
         except RoomParticipant.DoesNotExist:
             pass
-    
+
     @database_sync_to_async
     def save_message(self, content):
-        from .models import Room, RoomParticipant,Message
+        from .models import Room, Message
+        
         room = Room.objects.get(id=self.room_id)
         message = Message.objects.create(
             room=room,
@@ -284,10 +411,10 @@ class RoomConsumer(AsyncWebsocketConsumer):
             message_type='text'
         )
         return message
-    
+
     @database_sync_to_async
     def update_participant_mute_status(self, is_muted):
-        from .models import Room, RoomParticipant
+        from .models import RoomParticipant
         try:
             participant = RoomParticipant.objects.get(
                 user=self.user,
@@ -298,10 +425,24 @@ class RoomConsumer(AsyncWebsocketConsumer):
             participant.save()
         except RoomParticipant.DoesNotExist:
             pass
-    
+
+    @database_sync_to_async
+    def update_participant_video_status(self, video_enabled):
+        from .models import RoomParticipant
+        try:
+            participant = RoomParticipant.objects.get(
+                user=self.user,
+                room_id=self.room_id,
+                left_at__isnull=True
+            )
+            participant.video_enabled = video_enabled
+            participant.save()
+        except RoomParticipant.DoesNotExist:
+            pass
+
     @database_sync_to_async
     def update_participant_hand_status(self, hand_raised):
-        from .models import Room, RoomParticipant
+        from .models import RoomParticipant
         try:
             participant = RoomParticipant.objects.get(
                 user=self.user,
@@ -312,10 +453,11 @@ class RoomConsumer(AsyncWebsocketConsumer):
             participant.save()
         except RoomParticipant.DoesNotExist:
             pass
-    
+
     @database_sync_to_async
     def get_room_participants(self):
         from .models import Room, RoomParticipant
+        
         room = Room.objects.get(id=self.room_id)
         participants = RoomParticipant.objects.filter(
             room=room,
@@ -328,15 +470,15 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 'username': p.user.username,
                 'role': p.role,
                 'is_muted': p.is_muted,
+                'video_enabled': p.video_enabled,   #getattr(p, 'video_enabled', False)
                 'hand_raised': p.hand_raised,
                 'joined_at': p.joined_at.isoformat()
             }
             for p in participants
         ]
-    
+
     async def send_room_state(self):
         participants = await self.get_room_participants()
-        
         await self.send(text_data=json.dumps({
             'type': 'room_state',
             'participants': participants,

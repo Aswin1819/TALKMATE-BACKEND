@@ -1,5 +1,7 @@
 from rest_framework import serializers
 from users.models import CustomUser, UserProfile, Language, UserLanguage
+from rooms.models import *
+from rooms.serializers import TagSerializer, RoomParticipantSerializer
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 class AdminLoginSerializer(TokenObtainPairSerializer):
@@ -69,3 +71,76 @@ class UserProfileDetailSerializer(serializers.ModelSerializer):
             }
             for ul in user_languages
         ]
+
+class RoomListSerializer(serializers.ModelSerializer):
+    creator = serializers.CharField(source='host.username', read_only=True)
+    type = serializers.CharField(source='room_type.name', read_only=True)
+    language = serializers.CharField(source='language.name', read_only=True)
+    activeUsers = serializers.SerializerMethodField()
+    createdAt = serializers.DateTimeField(source='created_at', read_only=True)
+    
+    class Meta:
+        model = Room
+        fields = [
+            'id', 'title', 'creator', 'type', 'language',
+            'activeUsers', 'status', 'createdAt'
+        ]
+        
+    def get_activeUsers(self, obj):
+        return obj.participants.filter(left_at__isnull=True).count()
+    
+
+class RoomDetailSerializer(serializers.ModelSerializer):
+    creator = serializers.CharField(source='host.username', read_only=True)
+    type = serializers.CharField(source='room_type.name', read_only=True)
+    language = serializers.CharField(source='language.name', read_only=True)
+    activeUsers = serializers.SerializerMethodField()
+    createdAt = serializers.DateTimeField(source='created_at', read_only=True)
+    tags = TagSerializer(many=True, read_only=True)
+    members = serializers.SerializerMethodField()
+    description = serializers.CharField()
+
+    class Meta:
+        model = Room
+        fields = [
+            'id', 'title', 'creator', 'type', 'language',
+            'activeUsers', 'status', 'createdAt', 'tags', 'members', 'description'
+        ]
+
+    def get_activeUsers(self, obj):
+        return obj.participants.filter(left_at__isnull=True).count()
+    
+    def get_members(self, obj):
+        
+        seen = set()
+        unique_participants = []
+        for participant in obj.participants.order_by('-joined_at'):
+            if participant.user.id not in seen:
+                unique_participants.append(participant)
+                seen.add(participant.user.id)
+        return RoomParticipantSerializer(unique_participants, many=True).data
+            
+    
+class AdminRoomEditSerializer(serializers.ModelSerializer):
+    tag_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False
+    )
+
+    class Meta:
+        model = Room
+        fields = [
+            'title', 'description', 'room_type', 'language',
+            'tag_ids', 'max_participants', 'is_private', 'status'
+        ]
+
+    def update(self, instance, validated_data):
+        tag_ids = validated_data.pop('tag_ids', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if tag_ids is not None:
+            instance.tags.set(tag_ids)
+        return instance
+
