@@ -34,7 +34,7 @@ urlpatterns = [
     path('settings/delete-account/', DeleteAccountView.as_view(), name='delete-account'),
     path('settings/change-password/', ChangePasswordView.as_view(), name='change-password'),
     #languages/
-    
+    path('notifications/', NotificationListView.as_view(), name='user-notifications'),
 
     # other user routes...
 ]

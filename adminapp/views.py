@@ -1,14 +1,15 @@
-from rest_framework import status, permissions
+from rest_framework import status, permissions,generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from users.models import CustomUser, UserProfile, Language
-from rooms.models import Room, RoomParticipant, Message, Tag, RoomType
+from rooms.models import Room, RoomParticipant, Message, Tag, RoomType,ReportedRoom
 from .serializers import *
 from rest_framework.permissions import IsAuthenticated
 from users.utils import set_auth_cookies, clear_auth_cookies
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from users.models import Notification
  
 
 class AdminLoginView(TokenObtainPairView):
@@ -189,3 +190,45 @@ class TagListView(APIView):
     def get(self, request):
         tags = Tag.objects.all()
         return Response([{'id': tag.id, 'name': tag.name} for tag in tags])
+    
+
+
+class AdminReportedRoomListView(generics.ListAPIView):
+    serializer_class = AdminReportedRoomSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Only allow superusers
+        if not self.request.user.is_superuser:
+            return ReportedRoom.objects.none()
+        return ReportedRoom.objects.select_related('reported_by', 'reported_user', 'room').order_by('-timestamp')
+
+class AdminReportedRoomStatusUpdateView(generics.UpdateAPIView):
+    serializer_class = AdminReportedRoomSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = ReportedRoom.objects.all()
+    lookup_field = 'pk'
+
+    def patch(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+        report = self.get_object()
+        status_value = request.data.get('status')
+        if status_value not in ['resolved', 'dismissed', 'pending']:
+            return Response({"detail": "Invalid status."}, status=status.HTTP_400_BAD_REQUEST)
+        report.status = status_value
+        report.save()
+        # Create notification for the reporter
+        reporter = report.reported_by
+        reported_user = report.reported_user
+        room = report.room
+        status_display = status_value.capitalize()
+        Notification.objects.create(
+            user=reporter,
+            type=Notification.NotificationType.REPORT,
+            title=f"Your report has been {status_display}",
+            message=f"Your report against user '{reported_user.username}' in room '{room.title}' has been {status_display.lower()} by an admin.",
+            link=None
+        )
+        serializer = self.get_serializer(report)
+        return Response(serializer.data, status=status.HTTP_200_OK)

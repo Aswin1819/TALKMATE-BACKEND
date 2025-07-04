@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 from users.models import Language
+import uuid
 
 User = get_user_model()
 
@@ -20,6 +21,7 @@ class Room(models.Model):
         ('scheduled', 'Scheduled')
     ]
 
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True)
     host = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='hosted_rooms')
     title = models.CharField(max_length=100)
     description = models.TextField(blank=True)
@@ -44,6 +46,7 @@ class RoomParticipant(models.Model):
         COHOST = 'cohost', 'Co-host'
         PARTICIPANT = 'participant', 'Participant'
 
+    
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='participants')
     role = models.CharField(max_length=20, choices=Role.choices, default='participant')

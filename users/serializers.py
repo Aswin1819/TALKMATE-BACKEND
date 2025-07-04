@@ -427,3 +427,13 @@ class ChangePasswordSerializer(serializers.Serializer):
         user.set_password(self.validated_data['new_password'])
         user.save()
         return user
+
+class NotificationSerializer(serializers.ModelSerializer):
+    time = serializers.SerializerMethodField()
+    class Meta:
+        model = Notification
+        fields = ['id', 'type', 'title', 'message', 'is_read', 'created_at', 'link', 'time']
+
+    def get_time(self, obj):
+        from django.utils.timesince import timesince
+        return timesince(obj.created_at) + ' ago'

@@ -18,4 +18,8 @@ urlpatterns = [
     path('languages/', LanguageListView.as_view(), name='admin_language_list'),
     path('room-types/', RoomTypeListView.as_view(), name='admin_room_type_list'),
     path('tags/', TagListView.as_view(), name='admin_tag_list'),
+    
+    #moderationReports
+    path('reports/', AdminReportedRoomListView.as_view(), name='admin_reportedroom_list'),
+    path('reports/<int:pk>/status/', AdminReportedRoomStatusUpdateView.as_view(), name='admin_reportedroom_status_update'),
 ]

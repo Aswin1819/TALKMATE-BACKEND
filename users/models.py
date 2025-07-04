@@ -114,3 +114,34 @@ class UserSettings(models.Model):
 
     def __str__(self):
         return f"{self.user.username}'s settings"
+    
+    
+class Notification(models.Model):
+    class NotificationType(models.TextChoices):
+        REPORT = 'report', 'New Report'
+        USER_REGISTRATION = 'user_registration', 'New User Registration'
+        SYSTEM_UPDATE = 'system_update', 'System Update'
+        OTHER = 'other', 'Other'
+
+    user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        help_text='User to whom this notification is shown'
+    )
+    type = models.CharField(
+        max_length=30,
+        choices=NotificationType.choices,
+        default=NotificationType.OTHER
+    )
+    title = models.CharField(max_length=255)
+    message = models.TextField(blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    link = models.URLField(blank=True, null=True, help_text='Optional link to redirect on click')
+
+    def __str__(self):
+        return f"Notification to {self.user.username}: {self.title}"
+
+    class Meta:
+        ordering = ['-created_at']

@@ -144,3 +144,18 @@ class AdminRoomEditSerializer(serializers.ModelSerializer):
             instance.tags.set(tag_ids)
         return instance
 
+
+class AdminReportedRoomSerializer(serializers.ModelSerializer):
+    reporter = serializers.CharField(source='reported_by.username', read_only=True)
+    reported = serializers.CharField(source='reported_user.username', read_only=True)
+    roomName = serializers.CharField(source='room.title', read_only=True)
+    roomId = serializers.IntegerField(source='room.id', read_only=True)
+    reporterId = serializers.IntegerField(source='reported_by.id', read_only=True)
+    reportedId = serializers.IntegerField(source='reported_user.id', read_only=True)
+
+    class Meta:
+        model = ReportedRoom
+        fields = [
+            'id', 'reason', 'reporter', 'reported', 'roomName', 'roomId',
+            'reporterId', 'reportedId', 'timestamp', 'status'
+        ]

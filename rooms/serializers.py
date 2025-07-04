@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Room, RoomParticipant, Message, Tag, RoomType
+from .models import Room, RoomParticipant, Message, Tag, RoomType,ReportedRoom
 from users.models import Language
 
 class TagSerializer(serializers.ModelSerializer):
@@ -77,3 +77,8 @@ class MessageSerializer(serializers.ModelSerializer):
         read_only_fields = ['user', 'sent_at']
 
 
+class ReportedRoomSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReportedRoom
+        fields = ['id', 'room', 'reported_by', 'reported_user', 'reason', 'timestamp', 'status']
+        read_only_fields = ['id', 'timestamp', 'status', 'reported_by','room', 'reported_user']

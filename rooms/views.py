@@ -11,7 +11,7 @@ from django.db.models import Q
 from .models import Room, RoomParticipant, Message, Tag, RoomType
 from .serializers import (
     RoomSerializer, CreateRoomSerializer, RoomParticipantSerializer,
-    MessageSerializer, TagSerializer, RoomTypeSerializer
+    MessageSerializer, TagSerializer, RoomTypeSerializer,ReportedRoomSerializer
 )
 
 class LiveRoomsListView(generics.ListAPIView):
@@ -231,3 +231,17 @@ class RoomTypeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
 
+class ReportUserView(generics.CreateAPIView):
+    serializer_class = ReportedRoomSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        room_id = self.kwargs['room_id']
+        reported_user_id = self.kwargs['user_id']
+        serializer.save(
+            room=Room.objects.get(id=room_id),
+            reported_by=self.request.user,
+            reported_user_id=reported_user_id,
+            status='pending'
+        )
+    

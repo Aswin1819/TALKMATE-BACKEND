@@ -529,7 +529,15 @@ class AccessTokenView(APIView):
     
     def get(self, request):
         token = request.COOKIES.get('access_token')
-        return Response({'token':token})    
+        return Response({'token':token})
+
+class NotificationListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        notifications = Notification.objects.filter(user=request.user).order_by('-created_at')[:50]
+        serializer = NotificationSerializer(notifications, many=True)
+        return Response(serializer.data)
 
 
 

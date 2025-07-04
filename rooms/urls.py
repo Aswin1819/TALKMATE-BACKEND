@@ -20,6 +20,7 @@ urlpatterns = [
     
     # User Rooms
     path('my-rooms/', views.MyRoomsView.as_view(), name='my-rooms'),
+    path('<int:room_id>/report/<int:user_id>/', views.ReportUserView.as_view(), name='report-user'),
     
     # Utility
     path('', include(router.urls)),  # Include the router URLs for tags and room types
