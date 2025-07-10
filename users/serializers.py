@@ -11,6 +11,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.utils.timesince import timesince
 
 
 
@@ -187,6 +188,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     following_count = serializers.SerializerMethodField()
     last_seen_display = serializers.SerializerMethodField()
     date_joined = serializers.SerializerMethodField(source='user.date_joined')
+    subscription = serializers.SerializerMethodField()
     class Meta:
         model = UserProfile
         fields = [
@@ -194,7 +196,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'learning_languages', 'status', 'is_premium', 'xp', 'level', 'streak',
             'total_speak_time', 'total_rooms_joined', 'is_online', 'last_seen', 
             'last_seen_display', 'following', 'followers_count', 'following_count',
-            'date_joined'
+            'date_joined','subscription'
         ]
     def get_followers_count(self, obj):
         return obj.followers.count()
@@ -216,6 +218,13 @@ class UserProfileSerializer(serializers.ModelSerializer):
     
     def get_date_joined(self, obj):
         return obj.user.date_joined if obj.user and hasattr(obj.user, 'date_joined') else None
+    
+    def get_subscription(self,obj):
+        try:
+            sub = obj.user.subscription
+            return UserSubscriptionSerializer(sub).data
+        except UserSubscription.DoesNotExist:
+            return None
     
     
 class OTPSerializer(serializers.ModelSerializer):
@@ -435,5 +444,17 @@ class NotificationSerializer(serializers.ModelSerializer):
         fields = ['id', 'type', 'title', 'message', 'is_read', 'created_at', 'link', 'time']
 
     def get_time(self, obj):
-        from django.utils.timesince import timesince
         return timesince(obj.created_at) + ' ago'
+    
+
+
+class SubscriptionPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubscriptionPlan
+        fields = ['id', 'name', 'price', 'duration_days', 'features', 'is_active']
+
+class UserSubscriptionSerializer(serializers.ModelSerializer):
+    plan = SubscriptionPlanSerializer()
+    class Meta:
+        model = UserSubscription
+        fields = ['plan', 'start_date', 'end_date', 'is_active', 'payment_id', 'payment_status']

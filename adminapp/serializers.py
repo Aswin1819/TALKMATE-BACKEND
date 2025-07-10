@@ -1,7 +1,8 @@
 from rest_framework import serializers
-from users.models import CustomUser, UserProfile, Language, UserLanguage
+from users.models import CustomUser, UserProfile, UserLanguage, SubscriptionPlan,UserSubscription
 from rooms.models import *
 from rooms.serializers import TagSerializer, RoomParticipantSerializer
+from django.utils import timezone
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 class AdminLoginSerializer(TokenObtainPairSerializer):
@@ -159,3 +160,37 @@ class AdminReportedRoomSerializer(serializers.ModelSerializer):
             'id', 'reason', 'reporter', 'reported', 'roomName', 'roomId',
             'reporterId', 'reportedId', 'timestamp', 'status'
         ]
+
+class SubscriptionPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubscriptionPlan
+        fields = '__all__'
+        
+
+class UserSubscriptionSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    plan = serializers.CharField(source='plan.name', read_only=True)
+    planId = serializers.CharField(source='plan.id', read_only=True)
+    amount = serializers.SerializerMethodField()
+    paymentMethod = serializers.CharField(source='payment_status', read_only=True)
+    status = serializers.SerializerMethodField()
+    startDate = serializers.DateTimeField(source='start_date', read_only=True)
+    endDate = serializers.DateTimeField(source='end_date', read_only=True)
+
+    class Meta:
+        model = UserSubscription
+        fields = [
+            'id', 'username', 'email', 'plan', 'planId', 'startDate', 'endDate',
+            'status', 'amount', 'paymentMethod'
+        ]
+
+    def get_amount(self, obj):
+        return f"₹{obj.plan.price}" if obj.plan and obj.plan.price else ""
+
+    def get_status(self, obj):
+        if not obj.is_active:
+            return "canceled"
+        if obj.end_date and obj.end_date < timezone.now():
+            return "expired"
+        return "active"

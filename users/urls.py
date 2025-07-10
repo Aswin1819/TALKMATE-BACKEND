@@ -9,6 +9,7 @@ router = DefaultRouter()
 # router.register('profiles', UserProfileViewSet, basename='userprofile')
 router.register('languages', LanguageViewSet, basename='language')
 router.register('friendships', FriendshipViewSet, basename='friendship')
+router.register('subscription', SubscriptionPlanViewSet, basename='subscription')
 
 
 
@@ -35,6 +36,9 @@ urlpatterns = [
     path('settings/change-password/', ChangePasswordView.as_view(), name='change-password'),
     #languages/
     path('notifications/', NotificationListView.as_view(), name='user-notifications'),
+    #paytments
+    path('payment/create-order/', CreateRazorpayOrder.as_view()),
+    path('payment/verify/', VerifyRazorpayPayment.as_view()),
 
     # other user routes...
 ]

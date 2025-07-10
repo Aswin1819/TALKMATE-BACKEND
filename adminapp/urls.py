@@ -1,5 +1,9 @@
-from django.urls import path
+from django.urls import path,include
 from .views import *
+from rest_framework.routers import DefaultRouter
+
+router = DefaultRouter()
+router.register(r'subscription', SubscriptionPlanViewSet, basename='subscription')
 
 urlpatterns = [
     path('login/', AdminLoginView.as_view(), name='admin_login'),
@@ -22,4 +26,9 @@ urlpatterns = [
     #moderationReports
     path('reports/', AdminReportedRoomListView.as_view(), name='admin_reportedroom_list'),
     path('reports/<int:pk>/status/', AdminReportedRoomStatusUpdateView.as_view(), name='admin_reportedroom_status_update'),
+    
+    #subscriptions
+    path('',include(router.urls)),
+    path('user-subscriptions/', AdminUserSubscriptionListView.as_view(), name='admin_user_subscription_list'),
+    path('user-subscriptions/<int:user_id>/', AdminUserSubscriptionDetailView.as_view(), name='admin_user_subscription_detail'),
 ]

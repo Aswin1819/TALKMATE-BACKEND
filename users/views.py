@@ -1,23 +1,28 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.conf import settings
+import razorpay
 from .models import *
 from .serializers import *
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from decouple import config
+from datetime import timedelta
+from django.conf import settings
+from django.db import transaction
+from django.utils import timezone
+from rest_framework import status,viewsets
+from google.oauth2 import id_token
+from rest_framework.views import APIView
+from google.auth.transport import requests
+from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
+from django.contrib.auth import get_user_model
+from rest_framework.permissions import AllowAny
 from rest_framework.viewsets import ModelViewSet
-from rest_framework_simplejwt.views import TokenObtainPairView,TokenRefreshView
-from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import AuthenticationFailed
 from django.contrib.auth.password_validation import validate_password
-from django.db import transaction
-from rest_framework.permissions import AllowAny
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from .utils import generate_and_send_otp,set_auth_cookies,clear_auth_cookies
-from django.contrib.auth import get_user_model
-from google.oauth2 import id_token
-from google.auth.transport import requests
-from decouple import config
+from rest_framework_simplejwt.views import TokenObtainPairView,TokenRefreshView
+
 User = get_user_model()
 
   
@@ -540,4 +545,68 @@ class NotificationListView(APIView):
         return Response(serializer.data)
 
 
+client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID,settings.RAZORPAY_KEY_SECRET))
 
+class CreateRazorpayOrder(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self,request):
+        plain_id = request.data.get('plan_id')
+        plan = get_object_or_404(SubscriptionPlan,id=plain_id)
+        amount = int(plan.price * 100) 
+        
+        razorpay_order = client.order.create({
+            "amount": amount,
+            "currency": "INR",
+            "payment_capture": 1
+        })
+
+        return Response({
+            "order_id": razorpay_order['id'],
+            "amount": amount,
+            "currency": "INR",
+            "key": settings.RAZORPAY_KEY_ID,
+            "plan_id": plan.id
+        })
+
+class VerifyRazorpayPayment(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        data = request.data
+        try:
+            client.utility.verify_payment_signature({
+                "razorpay_order_id": data["razorpay_order_id"],
+                "razorpay_payment_id": data["razorpay_payment_id"],
+                "razorpay_signature": data["razorpay_signature"]
+            })
+
+            # plan = SubscriptionPlan.objects.get(id=data["plan_id"])
+            plan = get_object_or_404(SubscriptionPlan,id=data['plain_id'])
+            end_date = timezone.now() + timedelta(days=plan.duration_days)
+
+            UserSubscription.objects.update_or_create(
+                user=request.user,
+                defaults={
+                    "plan": plan,
+                    "start_date": timezone.now(),
+                    "end_date": end_date,
+                    "is_active": True,
+                    "payment_id": data["razorpay_payment_id"],
+                    "payment_status": "paid"
+                }
+            )
+            user = request.user
+            profile = get_object_or_404(UserProfile,user=user)
+            profile.is_premium = True
+            profile.save()
+            
+            return Response({"message": "Subscription activated"})
+        except razorpay.errors.SignatureVerificationError:
+            return Response({"error": "Payment verification failed"}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+class SubscriptionPlanViewSet(viewsets.ModelViewSet):
+    queryset = SubscriptionPlan.objects.filter(is_active=True)
+    serializer_class = SubscriptionPlanSerializer
+    permission_classes = [IsAuthenticated]

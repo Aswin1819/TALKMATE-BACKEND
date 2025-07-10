@@ -1,8 +1,8 @@
-from rest_framework import status, permissions,generics
+from rest_framework import status, permissions,generics,viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from users.models import CustomUser, UserProfile, Language
+from users.models import CustomUser, UserProfile, Language, SubscriptionPlan,UserSubscription
 from rooms.models import Room, RoomParticipant, Message, Tag, RoomType,ReportedRoom
 from .serializers import *
 from rest_framework.permissions import IsAuthenticated
@@ -231,4 +231,34 @@ class AdminReportedRoomStatusUpdateView(generics.UpdateAPIView):
             link=None
         )
         serializer = self.get_serializer(report)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class SubscriptionPlanViewSet(viewsets.ModelViewSet):
+    queryset = SubscriptionPlan.objects.filter(is_active=True)
+    serializer_class = SubscriptionPlanSerializer
+    permission_classes = [IsAuthenticated]
+    
+
+class AdminUserSubscriptionListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.is_superuser:
+            return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+        subs = UserSubscription.objects.select_related('user', 'plan').all()
+        serializer = UserSubscriptionSerializer(subs, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class AdminUserSubscriptionDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id):
+        if not request.user.is_superuser:
+            return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            sub = UserSubscription.objects.select_related('user', 'plan').get(user__id=user_id)
+        except UserSubscription.DoesNotExist:
+            return Response({"detail": "Subscription not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = UserSubscriptionSerializer(sub)
         return Response(serializer.data, status=status.HTTP_200_OK)
