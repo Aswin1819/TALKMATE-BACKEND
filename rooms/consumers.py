@@ -9,33 +9,42 @@ logger = logging.getLogger(__name__)
 class RoomConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         from django.contrib.auth.models import AnonymousUser
-        
+        print("A")
         self.room_id = self.scope['url_route']['kwargs']['room_id']
         self.room_group_name = f'room_{self.room_id}'
         self.user = self.scope['user']
-        
+        print("user:",self.user)
+        print("room_id:",self.room_id)
+        print("B")
         # Check if user is authenticated
         if isinstance(self.user, AnonymousUser):
             await self.close()
             return
-        
+        print("C")
         # Check if room exists and user can join
         room_access = await self.check_room_access()
         if not room_access:
             await self.close()
             return
-        
+        print("D")
+        #Multiple join prevention
+        # already_joined = await self.user_has_active_room()
+        # print("already_joined:",already_joined)
+        # if already_joined:
+        #     await self.close()
+        #     return 
+        print("E")    
         # Join room group
         await self.channel_layer.group_add(
             self.room_group_name,
             self.channel_name
         )
-        
+        print("F")
         await self.accept()
-        
+        print("G")
         # Add user as participant
         await self.add_participant()
-        
+        print("H")
         # Notify others about new participant
         await self.channel_layer.group_send(
             self.room_group_name,
@@ -46,15 +55,19 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 'message': f'{self.user.username} joined the room'
             }
         )
-        
+        print("I")
         # Send current room state to new user
         await self.send_room_state()
-        
+        print("J")
         # Request audio connections with existing participants
         await self.request_audio_connections()
-
+        print("K")
     async def disconnect(self, close_code):
         if hasattr(self, 'room_group_name'):
+            
+            #handle if the user is host
+            await self.handle_host_disconnect()
+            
             # Remove user from participants
             await self.remove_participant()
             
@@ -394,8 +407,7 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 room_id=self.room_id,
                 left_at__isnull=True
             )
-            participant.left_at = timezone.now()
-            participant.save()
+            self.calculate_stats_on_leave(participant)
         except RoomParticipant.DoesNotExist:
             pass
 
@@ -484,3 +496,61 @@ class RoomConsumer(AsyncWebsocketConsumer):
             'participants': participants,
             'room_id': self.room_id
         }))
+        
+
+    # @database_sync_to_async
+    # def user_has_active_room(self):
+    #     from .models import RoomParticipant
+    #     is_room_participant=RoomParticipant.objects.filter(
+    #         user=self.user,
+    #         room_id=self.room_id,
+    #         left_at__isnull=True
+    #     ).exists()
+    #     print("is_room_participant:",is_room_participant)
+    #     return is_room_participant
+    
+
+    @database_sync_to_async
+    def handle_host_disconnect(self):
+        from .models import Room,RoomParticipant
+        room = Room.objects.get(id=self.room_id)
+        if room.host == self.user:
+            # Finding another participant to become host
+            next_participant = RoomParticipant.objects.filter(
+                room=room, 
+                left_at__isnull=True
+            ).exclude(user=self.user).first()
+            
+            if next_participant:
+                room.host = next_participant.user
+                room.save()
+                next_participant.role = 'host'
+                next_participant.save()
+            else:
+                # No participants left, end room
+                room.status = 'ended'
+                room.ended_at = timezone.now()
+                room.save()
+            
+
+
+    def calculate_stats_on_leave(self, participant):
+        from .models import UserActivity
+        
+        now = timezone.now()
+        participant.left_at = now
+        participant.save()
+
+        duration = (participant.left_at - participant.joined_at).total_seconds()
+        minutes = max(1, int(duration // 60))
+
+        profile = participant.user.userprofile
+        profile.total_speak_time = (profile.total_speak_time or 0) + minutes
+        profile.xp += minutes * 20
+        profile.level = profile.xp // 1000 + 1
+        profile.save()
+
+        activity, _ = UserActivity.objects.get_or_create(user=participant.user, date=now.date())
+        activity.xp_earned += minutes * 20
+        activity.practice_minutes += minutes
+        activity.save()

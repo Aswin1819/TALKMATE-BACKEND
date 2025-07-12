@@ -378,7 +378,7 @@ class PasswordResetOTPVerifyView(APIView):
             otp_obj.save()
             # Optionally, set a flag on user to allow password reset
             return Response({'message': 'OTP verified successfully. You can now reset your password.'})
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'message':serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
 class PasswordResetResendOTPView(APIView):
     permission_classes = [AllowAny]
@@ -411,8 +411,8 @@ class CurrentUserProfileView(APIView):
         except UserProfile.DoesNotExist:
             return Response({'error':'Profile not found'},status=status.HTTP_404_NOT_FOUND)
         serializers = UserProfileSerializer(profile)
-        print("Serializers data:", serializers.data)
-        return Response({'profile':serializers.data})
+        # print("Serializers data:", serializers.data)
+        return Response(serializers.data) # removed the wrapping of profile key.
 
 
 class UpdateUserProfileView(APIView):

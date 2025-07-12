@@ -1,17 +1,17 @@
-from rest_framework import serializers
-from .models import *
-from django.utils.timesince import timesince
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from django.contrib.auth.hashers import make_password
-from .utils import upload_avatar_to_cloudinary
-from rest_framework.exceptions import AuthenticationFailed
 import re
+from .models import *
 from django.db.models import Q
-from django.contrib.auth import authenticate
-from django.contrib.auth.password_validation import validate_password
-from django.core.exceptions import ValidationError
-from rest_framework_simplejwt.tokens import RefreshToken
+from datetime import timedelta,date
+from rooms.models import UserActivity
+from rest_framework import serializers
 from django.utils.timesince import timesince
+from .utils import upload_avatar_to_cloudinary
+from django.core.exceptions import ValidationError
+from django.contrib.auth.hashers import make_password
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.exceptions import AuthenticationFailed
+from django.contrib.auth.password_validation import validate_password
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 
 
@@ -189,6 +189,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
     last_seen_display = serializers.SerializerMethodField()
     date_joined = serializers.SerializerMethodField(source='user.date_joined')
     subscription = serializers.SerializerMethodField()
+    current_streak = serializers.SerializerMethodField()
+    daily_xp = serializers.SerializerMethodField()
+    weekly_practice_hours = serializers.SerializerMethodField()
     class Meta:
         model = UserProfile
         fields = [
@@ -196,7 +199,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'learning_languages', 'status', 'is_premium', 'xp', 'level', 'streak',
             'total_speak_time', 'total_rooms_joined', 'is_online', 'last_seen', 
             'last_seen_display', 'following', 'followers_count', 'following_count',
-            'date_joined','subscription'
+            'date_joined','subscription','current_streak','daily_xp','weekly_practice_hours'
         ]
     def get_followers_count(self, obj):
         return obj.followers.count()
@@ -225,6 +228,35 @@ class UserProfileSerializer(serializers.ModelSerializer):
             return UserSubscriptionSerializer(sub).data
         except UserSubscription.DoesNotExist:
             return None
+    
+    def get_current_streak(self, obj):
+        user = obj.user
+        today = date.today()
+        streak = 0
+        for i in range(0, 100):  # reasonable max streak
+            day = today - timedelta(days=i)
+            if UserActivity.objects.filter(user=user, date=day).exists():
+                streak += 1
+            else:
+                if i == 0:
+                    continue  # allow for today being inactive so far
+                break
+        return streak
+
+    def get_daily_xp(self, obj):
+        user = obj.user
+        today = date.today()
+        activity = UserActivity.objects.filter(user=user, date=today).first()
+        return activity.xp_earned if activity else 0
+
+    def get_weekly_practice_hours(self, obj):
+        user = obj.user
+        today = date.today()
+        week_ago = today - timedelta(days=6)
+        activities = UserActivity.objects.filter(user=user, date__gte=week_ago, date__lte=today)
+        total_minutes = sum(a.practice_minutes for a in activities)
+        print("total_minutes:",total_minutes)
+        return round(total_minutes / 60, 1)
     
     
 class OTPSerializer(serializers.ModelSerializer):

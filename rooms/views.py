@@ -8,11 +8,12 @@ from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db.models import Q
-from .models import Room, RoomParticipant, Message, Tag, RoomType
+from .models import Room, RoomParticipant, Message, Tag, RoomType,UserActivity
 from .serializers import (
     RoomSerializer, CreateRoomSerializer, RoomParticipantSerializer,
     MessageSerializer, TagSerializer, RoomTypeSerializer,ReportedRoomSerializer
 )
+from datetime import timedelta
 
 class LiveRoomsListView(generics.ListAPIView):
     """
@@ -53,6 +54,9 @@ class CreateRoomView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        if RoomParticipant.objects.filter(user=request.user, left_at__isnull=True).exists():
+            return Response({'error': 'Leave your current room first.'}, status=403)
+
         create_serializer = CreateRoomSerializer(data=request.data)
         create_serializer.is_valid(raise_exception=True)
 
@@ -64,11 +68,12 @@ class CreateRoomView(APIView):
         )
 
         # Add host as participant
-        RoomParticipant.objects.create(
+        RoomParticipant.objects.update_or_create(
             user=request.user,
             room=room,
-            role='host'
+            defaults={'role': 'host'}
         )
+
 
         # Now return the full room data
         response_serializer = RoomSerializer(room)
@@ -87,74 +92,81 @@ class RoomDetailView(generics.RetrieveAPIView):
         room_id = self.kwargs['room_id']
         return get_object_or_404(Room, id=room_id, status='live')
 
-class JoinRoomView(generics.CreateAPIView):
-    """
-    Join a room (for private rooms with password)
-    """
+class JoinRoomView(APIView):
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request, room_id):
         room = get_object_or_404(Room, id=room_id, status='live')
-        password = request.data.get('password')
-        
-        # Check if room is private and password is required
-        if room.is_private and room.password != password:
-            return Response(
-                {'error': 'Invalid password'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Check max participants
-        current_participants = room.participants.filter(left_at__isnull=True).count()
-        if current_participants >= room.max_participants:
-            return Response(
-                {'error': 'Room is full'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Check if user is already in room
-        existing_participant = RoomParticipant.objects.filter(
+
+        # Enforce password check for private rooms
+        if room.is_private:
+            password = request.data.get('password')
+            if not password or not room.check_password(password):
+                return Response({'error': 'Invalid password'}, status=403)
+
+        # Check if user is already in any active room
+        active_room_participant = RoomParticipant.objects.filter(user=request.user, left_at__isnull=True).first()
+        if active_room_participant:
+            if active_room_participant.room_id == room.id:
+                return Response({'message': 'Already in this room'}, status=200)
+            else:
+                return Response({'error': 'Already in another room. Leave it first.'}, status=403)
+
+        # Rejoining logic: revive old participant if exists
+        participant, created = RoomParticipant.objects.get_or_create(
             user=request.user,
             room=room,
-            left_at__isnull=True
-        ).exists()
-        
-        if existing_participant:
-            return Response(
-                {'message': 'Already in room'},
-                status=status.HTTP_200_OK
-            )
-        
-        return Response(
-            {'message': 'Can join room', 'room_id': room_id},
-            status=status.HTTP_200_OK
+            defaults={'role': 'participant'}
         )
+        if not created:
+            participant.left_at = None  # Reset left_at to "rejoin"
+            participant.save()
+
+        return Response({'message': 'Joined room successfully'}, status=200)
+
 
 class LeaveRoomView(generics.CreateAPIView):
-    """
-    Leave a room
-    """
     permission_classes = [IsAuthenticated]
     
     def post(self, request, room_id):
         try:
+            print("Inside try")
             participant = RoomParticipant.objects.get(
                 user=request.user,
                 room_id=room_id,
-                # left_at__isnull=True
+                left_at__isnull=True
             )
-            participant.left_at = timezone.now()
+            print("After participant")
+            now = timezone.now()
+            participant.left_at = now
             participant.save()
-            
-            return Response(
-                {'message': 'Left room successfully'},
-                status=status.HTTP_200_OK
-            )
+
+            # Calculate session duration
+            session_duration = (participant.left_at - participant.joined_at)
+            minutes = int(session_duration.total_seconds() // 60)
+            if minutes < 1:
+                minutes = 1
+
+            # Update user profile
+            profile = request.user.userprofile
+            profile.total_speak_time = (profile.total_speak_time or timedelta()) + timedelta(minutes=minutes)
+            profile.xp += minutes * 20
+            profile.level = profile.xp // 1000 + 1
+            profile.save()
+
+            # Log daily activity for streaks and stats
+            today = now.date()
+            activity, _ = UserActivity.objects.get_or_create(user=request.user, date=today)
+            activity.xp_earned += minutes * 20
+            activity.practice_minutes += minutes
+            print("PracticeMinutes:",activity.practice_minutes)
+            activity.save()
+            print("till activity executed")
+
+            return Response({'message': 'Left room, stats updated.'})
         except RoomParticipant.DoesNotExist:
-            return Response(
-                {'error': 'Not in this room'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            print("error in leave room view")
+            return Response({'error': 'Not in room.'}, status=400)
 
 class RoomParticipantsView(generics.ListAPIView):
     """
@@ -244,4 +256,3 @@ class ReportUserView(generics.CreateAPIView):
             reported_user_id=reported_user_id,
             status='pending'
         )
-    

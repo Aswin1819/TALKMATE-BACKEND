@@ -55,14 +55,19 @@ class CreateRoomSerializer(serializers.ModelSerializer):
         ]
     
     def validate_max_participants(self, value):
-        if value < 2 or value > 50:
-            raise serializers.ValidationError("Max participants must be between 2 and 50")
+        if value < 2 or value > 10:
+            raise serializers.ValidationError("Max participants must be between 2 and 10")
         return value
     
     def create(self, validated_data):
         tag_ids = validated_data.pop('tag_ids', [])
+        password = validated_data.pop('password',None)
         room = Room.objects.create(**validated_data)
         
+        if password:
+            room.set_password(password)
+            room.save()
+
         if tag_ids:
             room.tags.set(tag_ids)
         

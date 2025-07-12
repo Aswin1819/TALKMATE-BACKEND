@@ -2,6 +2,8 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from users.models import Language
 import uuid
+from django.contrib.auth.hashers import make_password, check_password
+
 
 User = get_user_model()
 
@@ -39,6 +41,13 @@ class Room(models.Model):
     ended_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='live')
     is_deleted = models.BooleanField(default=False)
+    
+    def set_password(self,raw_password):
+        self.password = make_password(raw_password)
+        
+    def check_password(self, raw_password):
+        return check_password(raw_password,self.password)
+
 
 class RoomParticipant(models.Model):
     class Role(models.TextChoices):
@@ -89,3 +98,13 @@ class ReportedRoom(models.Model):
 
     def __str__(self):
         return f"Report on {self.reported_user} by {self.reported_by} in {self.room}"
+
+
+class UserActivity(models.Model):
+    user = models.ForeignKey(User,on_delete=models.CASCADE)
+    date = models.DateField()
+    xp_earned = models.IntegerField(default=0)
+    practice_minutes = models.IntegerField(default=0)
+    
+    class Meta:
+        unique_together = ('user','date')
