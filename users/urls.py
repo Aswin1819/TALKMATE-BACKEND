@@ -39,6 +39,8 @@ urlpatterns = [
     #paytments
     path('payment/create-order/', CreateRazorpayOrder.as_view()),
     path('payment/verify/', VerifyRazorpayPayment.as_view()),
-
+    #subscriptions
+    path('subscription-history/', UserSubscriptionHistoryView.as_view(), name='subscription-history')
+    
     # other user routes...
 ]

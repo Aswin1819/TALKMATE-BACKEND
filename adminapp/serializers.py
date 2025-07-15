@@ -79,6 +79,7 @@ class RoomListSerializer(serializers.ModelSerializer):
     language = serializers.CharField(source='language.name', read_only=True)
     activeUsers = serializers.SerializerMethodField()
     createdAt = serializers.DateTimeField(source='created_at', read_only=True)
+
     
     class Meta:
         model = Room
@@ -90,6 +91,7 @@ class RoomListSerializer(serializers.ModelSerializer):
     def get_activeUsers(self, obj):
         return obj.participants.filter(left_at__isnull=True).count()
     
+
 
 class RoomDetailSerializer(serializers.ModelSerializer):
     creator = serializers.CharField(source='host.username', read_only=True)

@@ -411,6 +411,7 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
 class UserSettingsSerializer(serializers.ModelSerializer):
     language_name = serializers.CharField(source='language.name', read_only=True)
     language_code = serializers.CharField(source='language.code', read_only=True)
+    is_google_login = serializers.BooleanField(source='user.is_google_login', read_only=True)
     
     class Meta:
         model = UserSettings
@@ -426,7 +427,8 @@ class UserSettingsSerializer(serializers.ModelSerializer):
             'language',
             'language_name',
             'language_code',
-            'timezone'
+            'timezone',
+            'is_google_login'
         ]
         
     def validate(self, data):
@@ -455,6 +457,10 @@ class ChangePasswordSerializer(serializers.Serializer):
         return value
     
     def validate(self, data):
+        user = self.context['request'].user
+        if getattr(user,'is_google_login',False):
+            raise serializers.ValidationError("Password change is not allowed for google login users")
+        
         if data['new_password'] != data['confirm_password']:
             raise serializers.ValidationError("New passwords do not match.")
         
@@ -490,3 +496,17 @@ class UserSubscriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserSubscription
         fields = ['plan', 'start_date', 'end_date', 'is_active', 'payment_id', 'payment_status']
+        
+class SubscriptionPlanMiniSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubscriptionPlan
+        fields = ['id', 'name', 'price']  # only return necessary fields
+
+
+class UserSubscriptionHistorySerializer(serializers.ModelSerializer):
+    plan = SubscriptionPlanMiniSerializer()  # nested serializer
+    
+    class Meta:
+        model = UserSubscriptionHistory
+        fields = ['id', 'plan', 'start_date', 'end_date', 'payment_id', 'payment_status']
+        

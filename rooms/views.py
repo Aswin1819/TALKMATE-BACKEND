@@ -25,7 +25,7 @@ class LiveRoomsListView(generics.ListAPIView):
     def get_queryset(self):
         queryset = Room.objects.filter(
             status='live',
-            is_private=False,
+            # is_private=False,
             is_deleted=False
         ).select_related('host', 'room_type', 'language').prefetch_related('tags')
         

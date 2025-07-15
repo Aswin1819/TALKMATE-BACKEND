@@ -13,6 +13,7 @@ def generate_unique_id():
 class CustomUser(AbstractUser):
     email = models.EmailField(unique=True)
     is_verified = models.BooleanField(default=False)
+    is_google_login = models.BooleanField(default=False)
     
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
@@ -171,6 +172,18 @@ class UserSubscription(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.plan.name}"
+    
+class UserSubscriptionHistory(models.Model):
+    user = models.ForeignKey(CustomUser,on_delete=models.CASCADE)
+    plan = models.ForeignKey(SubscriptionPlan,on_delete=models.SET_NULL,null=True)
+    start_date = models.DateTimeField()
+    end_date = models.DateTimeField()
+    payment_id = models.CharField(max_length=255,blank=True,null=True)
+    payment_status = models.CharField(max_length=50,default='paid')
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.plan.name} (History)"
+    
     
 
         

@@ -31,4 +31,8 @@ urlpatterns = [
     path('',include(router.urls)),
     path('user-subscriptions/', AdminUserSubscriptionListView.as_view(), name='admin_user_subscription_list'),
     path('user-subscriptions/<int:user_id>/', AdminUserSubscriptionDetailView.as_view(), name='admin_user_subscription_detail'),
+    
+    #dashboard
+    path('stats/', AdminStatsView.as_view(), name='admin_stats'),
+    path('recent-activity/', AdminRecentActivityView.as_view(), name='admin_recent_activity'),
 ]

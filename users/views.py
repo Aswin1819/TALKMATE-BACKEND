@@ -6,10 +6,11 @@ from datetime import timedelta
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
-from rest_framework import status,viewsets
 from google.oauth2 import id_token
 from rest_framework.views import APIView
 from google.auth.transport import requests
+from decimal import Decimal, ROUND_HALF_UP
+from rest_framework import status,viewsets
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
@@ -51,8 +52,13 @@ class GoogleLoginView(APIView):
                     'username': name,
                     'is_active': True,
                     'is_verified': True,
+                    'is_google_login':True,
                 }
             )
+            
+            if not created and not user.is_google_login:
+                user.is_google_login = True
+                user.save(update_fields=['is_google_login'])
 
             # Use serializer to generate token and data
             serializer = GoogleLoginSerializer(data={}, context={'user': user})
@@ -551,9 +557,26 @@ class CreateRazorpayOrder(APIView):
     permission_classes = [IsAuthenticated]
     
     def post(self,request):
-        plain_id = request.data.get('plan_id')
-        plan = get_object_or_404(SubscriptionPlan,id=plain_id)
-        amount = int(plan.price * 100) 
+        plan_id = request.data.get('plan_id')
+        plan = get_object_or_404(SubscriptionPlan,id=plan_id)
+        # amount = int(plan.price * 100) 
+        discount = Decimal(0)
+        now = timezone.now()
+        user = request.user
+
+        existing_subscription = getattr(user, 'subscription', None)
+        if existing_subscription and existing_subscription.plan:
+            current_plan = existing_subscription.plan
+            current_end = existing_subscription.end_date
+
+            if plan.price > current_plan.price:
+                remaining_days = max((current_end - now).days, 0)
+                daily_rate = current_plan.price / Decimal(current_plan.duration_days)
+                discount = (daily_rate * remaining_days).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        # Final amount to charge (after discount)
+        final_price = max(plan.price - discount, 0).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        amount = int(final_price * 100)  # Razorpay expects amount in paise
         
         razorpay_order = client.order.create({
             "amount": amount,
@@ -562,51 +585,100 @@ class CreateRazorpayOrder(APIView):
         })
 
         return Response({
-            "order_id": razorpay_order['id'],
-            "amount": amount,
-            "currency": "INR",
-            "key": settings.RAZORPAY_KEY_ID,
-            "plan_id": plan.id
-        })
+        "order_id": razorpay_order['id'],
+        "amount": amount,
+        "currency": "INR",
+        "key": settings.RAZORPAY_KEY_ID,
+        "plan_id": plan.id,
+        "final_price": str(final_price),
+        "discount_applied": str(discount),
+    })
+
 
 class VerifyRazorpayPayment(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         data = request.data
+
         try:
+            # Step 1: Verify Razorpay Signature
             client.utility.verify_payment_signature({
                 "razorpay_order_id": data["razorpay_order_id"],
                 "razorpay_payment_id": data["razorpay_payment_id"],
                 "razorpay_signature": data["razorpay_signature"]
             })
 
-            # plan = SubscriptionPlan.objects.get(id=data["plan_id"])
-            plan = get_object_or_404(SubscriptionPlan,id=data['plain_id'])
-            end_date = timezone.now() + timedelta(days=plan.duration_days)
+            new_plan = get_object_or_404(SubscriptionPlan, id=data['plan_id'])
+            now = timezone.now()
+            end_date = now + timedelta(days=new_plan.duration_days)
 
+            existing_subscription = getattr(request.user, 'subscription', None)
+            discount = Decimal(0)
+
+            if existing_subscription and existing_subscription.plan:
+                current_plan = existing_subscription.plan
+                current_end = existing_subscription.end_date
+
+                # Only apply proration if new plan is more expensive
+                if new_plan.price > current_plan.price:
+                    remaining_days = max((current_end - now).days, 0)
+                    daily_rate = current_plan.price / Decimal(current_plan.duration_days)
+                    discount = (daily_rate * remaining_days).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            
+                UserSubscriptionHistory.objects.create(
+                    user=request.user,
+                    plan=current_plan,
+                    start_date=existing_subscription.start_date,
+                    end_date=now,
+                    payment_id=existing_subscription.payment_id,
+                    payment_status=existing_subscription.payment_status
+                )
+            
+                    
+
+            # Final charge after applying discount
+            final_price = max(new_plan.price - discount, 0).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+            # Update/Create new subscription
             UserSubscription.objects.update_or_create(
                 user=request.user,
                 defaults={
-                    "plan": plan,
-                    "start_date": timezone.now(),
+                    "plan": new_plan,
+                    "start_date": now,
                     "end_date": end_date,
                     "is_active": True,
                     "payment_id": data["razorpay_payment_id"],
                     "payment_status": "paid"
                 }
             )
-            user = request.user
-            profile = get_object_or_404(UserProfile,user=user)
-            profile.is_premium = True
+
+            # Update is_premium flag
+            profile = get_object_or_404(UserProfile, user=request.user)
+            profile.is_premium = new_plan.price > 0
             profile.save()
-            
-            return Response({"message": "Subscription activated"})
+
+            return Response({
+                "message": "Subscription upgraded",
+                "charged": str(final_price),
+                "discount_applied": str(discount),
+            })
+
         except razorpay.errors.SignatureVerificationError:
             return Response({"error": "Payment verification failed"}, status=status.HTTP_400_BAD_REQUEST)
         
 
 class SubscriptionPlanViewSet(viewsets.ModelViewSet):
-    queryset = SubscriptionPlan.objects.filter(is_active=True)
+    queryset = SubscriptionPlan.objects.filter(is_active=True).order_by('price')
     serializer_class = SubscriptionPlanSerializer
     permission_classes = [IsAuthenticated]
+    
+class UserSubscriptionHistoryView(APIView):
+    perimission_classes= [IsAuthenticated]
+    
+    def get(self,request):
+        history = UserSubscriptionHistory.objects.filter(user=request.user).order_by('-start_date')
+        serializer = UserSubscriptionHistorySerializer(history,many=True)
+        return Response(serializer.data)
+
+    

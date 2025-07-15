@@ -34,7 +34,7 @@ class Room(models.Model):
 
     max_participants = models.IntegerField(default=6)
     is_private = models.BooleanField(default=False)
-    password = models.CharField(max_length=50, blank=True, null=True)
+    password = models.CharField(max_length=250, blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
@@ -87,6 +87,7 @@ class ReportedRoom(models.Model):
         ('pending', 'Pending'),
         ('resolved', 'Resolved'),
         ('dismissed', 'Dismissed'),
+        ('suspend', 'suspend'),
     ]
 
     room = models.ForeignKey(Room, on_delete=models.CASCADE)
