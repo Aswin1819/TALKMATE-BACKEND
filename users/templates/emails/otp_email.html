@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Your OTP Code</title>
+</head>
+<body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+    <div style="max-width: 600px; margin: auto; background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+        <h2 style="color: #6a1b9a; text-align: center;">🔐 TalkMate OTP Verification</h2>
+        <p>Hi {{ user.first_name|default:"there" }},</p>
+        <p>Your one-time password (OTP) is:</p>
+        <div style="text-align: center; font-size: 32px; font-weight: bold; margin: 20px 0; color: #2e7d32;">
+            {{ code }}
+        </div>
+        <p>This code will expire at <strong>{{ expires_at|date:"H:i:s" }}</strong> (in 2 minutes).</p>
+        <p>If you didn’t request this, please ignore this email.</p>
+        <p style="margin-top: 30px;">Thanks,<br>The TalkMate Team</p>
+        <hr style="margin-top: 40px;">
+        <small style="color: #999;">This is an automated message. Please do not reply to this email.</small>
+    </div>
+</body>
+</html>
