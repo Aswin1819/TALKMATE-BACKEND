@@ -15,10 +15,18 @@ class RoomTypeSerializer(serializers.ModelSerializer):
 class RoomParticipantSerializer(serializers.ModelSerializer):
     user_id = serializers.IntegerField(source='user.id', read_only=True)
     username = serializers.CharField(source='user.username', read_only=True)
+    avatar = serializers.SerializerMethodField()
     
     class Meta:
         model = RoomParticipant
-        fields = ['user_id', 'username', 'role', 'joined_at', 'is_muted', 'hand_raised']
+        fields = ['user_id', 'username', 'role', 'joined_at', 'is_muted', 'hand_raised','avatar']
+        
+    def get_avatar(self, obj):
+        try:
+            return obj.user.userprofile.avatar
+        except:
+            return None
+        
 
 class RoomSerializer(serializers.ModelSerializer):
     host_username = serializers.CharField(source='host.username', read_only=True)
@@ -75,11 +83,18 @@ class CreateRoomSerializer(serializers.ModelSerializer):
 
 class MessageSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
+    avatar = serializers.SerializerMethodField()
     
     class Meta:
         model = Message
-        fields = ['id', 'user', 'username', 'content', 'message_type', 'sent_at']
+        fields = ['id', 'user', 'username', 'content', 'message_type', 'sent_at','avatar']
         read_only_fields = ['user', 'sent_at']
+    
+    def get_avatar(self, obj):
+        try:
+            return obj.user.userprofile.avatar
+        except:
+            return None
 
 
 class ReportedRoomSerializer(serializers.ModelSerializer):

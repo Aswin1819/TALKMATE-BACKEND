@@ -152,6 +152,7 @@ class LeaveRoomView(generics.CreateAPIView):
             profile.total_speak_time = (profile.total_speak_time or timedelta()) + timedelta(minutes=minutes)
             profile.xp += minutes * 20
             profile.level = profile.xp // 1000 + 1
+            profile.total_rooms_joined += 1
             profile.save()
 
             # Log daily activity for streaks and stats
