@@ -12,6 +12,7 @@ from google.auth.transport import requests
 from decimal import Decimal, ROUND_HALF_UP
 from rest_framework import status,viewsets
 from rest_framework.response import Response
+from .pagination import SocialListPagination
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from rest_framework.permissions import AllowAny
@@ -731,10 +732,13 @@ class MyFollowingView(APIView):
         return Response(serializer.data)        
         
 class BaseSocialListView(APIView):
+    """Paginated list of a relationship set (followers/following/friends).
+    Subclasses must set relation_attr in {'followers','following','friends'}.
+    Optional query param ?user_id=<uid> to view someone else's social graph."""
     permission_classes = [IsAuthenticated]
-    relation_attr = None  # 'followers' | 'following' | 'friends'
+    relation_attr = None
 
-    def get_queryset(self, profile):
+    def get_queryset_for_profile(self, profile):
         if self.relation_attr == 'followers':
             return profile.followers.all().select_related('user')
         if self.relation_attr == 'following':
@@ -746,14 +750,13 @@ class BaseSocialListView(APIView):
     def get(self, request, *args, **kwargs):
         user_id = request.query_params.get('user_id')
         if user_id:
-            profile = get_object_or_404(UserProfile, user__id=user_id)
+            viewed_profile = get_object_or_404(UserProfile, user__id=user_id)
         else:
-            profile = request.user.userprofile
+            viewed_profile = request.user.userprofile
 
-        qs = self.get_queryset(profile)
+        qs = self.get_queryset_for_profile(viewed_profile)
         paginator = SocialListPagination()
         page = paginator.paginate_queryset(qs, request)
-
         serializer = FollowCardSerializer(page, many=True, context={'viewer_profile': request.user.userprofile})
         return paginator.get_paginated_response(serializer.data)
 
@@ -766,3 +769,46 @@ class FollowingListView(BaseSocialListView):
 class FriendsListView(BaseSocialListView):
     relation_attr = 'friends'
 
+
+class SocialFollowUserView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, target_user_id):
+        viewer = request.user.userprofile
+        target = get_object_or_404(UserProfile, user__id=target_user_id)
+
+        if viewer == target:
+            data = SocialActionResponseSerializer.build(
+                viewer_profile=viewer, target_profile=target, message='You cannot follow yourself.'
+            )
+            return Response(data, status=status.HTTP_400_BAD_REQUEST)
+
+        if not viewer.is_following(target):
+            viewer.follow_user(target)
+            msg = 'Followed successfully.'
+        else:
+            msg = 'Already following.'
+
+        data = SocialActionResponseSerializer.build(
+            viewer_profile=viewer, target_profile=target, message=msg
+        )
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class SocialUnfollowUserView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, target_user_id):
+        viewer = request.user.userprofile
+        target = get_object_or_404(UserProfile, user__id=target_user_id)
+
+        if viewer.is_following(target):
+            viewer.unfollow_user(target)
+            msg = 'Unfollowed successfully.'
+        else:
+            msg = 'You were not following this user.'
+
+        data = SocialActionResponseSerializer.build(
+            viewer_profile=viewer, target_profile=target, message=msg
+        )
+        return Response(data, status=status.HTTP_200_OK)

@@ -526,22 +526,30 @@ class FollowCardSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserProfile
-        fields = ['id','unique_id','avatar','level','is_online',
-        'is_premium','username','relationship_state']
+        fields = [
+            'id',            # profile id
+            'unique_id',     # short code / uuid
+            'avatar',
+            'level',
+            'is_online',
+            'is_premium',
+            'username',
+            'relationship_state',
+        ]
 
     def _viewer(self):
         return self.context.get('viewer_profile')
-     
+
     def get_username(self, obj):
-        user = getattr(obj,'user',None)
+        user = getattr(obj, 'user', None)
         return user.username if user else obj.unique_id
-    
+
     def get_relationship_state(self, obj):
         viewer = self._viewer()
         if not viewer:
             return 'none'
-        following = viewer.is_following(obj)      # I follow them?
-        follower = viewer.is_followed_by(obj)     # They follow me?
+        following = viewer.is_following(obj)      # viewer follows obj?
+        follower = viewer.is_followed_by(obj)     # obj follows viewer?
         if following and follower:
             return 'friend'
         if following:
@@ -551,3 +559,32 @@ class FollowCardSerializer(serializers.ModelSerializer):
         return 'none'
 
         
+class SocialActionResponseSerializer(serializers.Serializer):
+    target_profile_id = serializers.IntegerField()
+    target_user_id = serializers.IntegerField()
+    relationship_state = serializers.ChoiceField(choices=['none','follower','following','friend'])
+    is_following = serializers.BooleanField()
+    is_follower = serializers.BooleanField()
+    message = serializers.CharField()
+
+    @staticmethod
+    def build(*, viewer_profile, target_profile, message):
+        is_following = viewer_profile.is_following(target_profile)
+        is_follower = viewer_profile.is_followed_by(target_profile)
+        if is_following and is_follower:
+            rel = 'friend'
+        elif is_following:
+            rel = 'following'
+        elif is_follower:
+            rel = 'follower'
+        else:
+            rel = 'none'
+        payload = {
+            'target_profile_id': target_profile.id,
+            'target_user_id': target_profile.user_id,
+            'relationship_state': rel,
+            'is_following': is_following,
+            'is_follower': is_follower,
+            'message': message,
+        }
+        return SocialActionResponseSerializer(payload).data

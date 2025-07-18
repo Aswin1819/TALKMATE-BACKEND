@@ -61,7 +61,7 @@ class UserProfile(models.Model):
         return self.followers.filter(id=user_profile.id).exists()
 
     def mutual_friends_qs(self):
-        return self.following.filter(follow=self).distinct()
+        return self.following.filter(following=self).distinct()
     
     def friends_count(self):
         return self.mutual_friends_qs().count()

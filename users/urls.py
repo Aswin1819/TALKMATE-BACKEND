@@ -45,6 +45,14 @@ urlpatterns = [
     path('unfollow/<int:target_user_id>/', UnfollowUserView.as_view(), name='unfollow-user'),
     path('followers/', MyFollowersView.as_view(), name='my-followers'),
     path('following/', MyFollowingView.as_view(), name='my-following'),
+    #social
+    path('social/followers/', FollowersListView.as_view(), name='social-followers'),
+    path('social/following/', FollowingListView.as_view(), name='social-following'),
+    path('social/friends/', FriendsListView.as_view(), name='social-friends'),
+     # Social modal follow/unfollow (structured response)
+    path('social/follow/<int:target_user_id>/', SocialFollowUserView.as_view(), name='social-follow-user'),
+    path('social/unfollow/<int:target_user_id>/', SocialUnfollowUserView.as_view(), name='social-unfollow-user'),
+
     
     # other user routes...
 ]
