@@ -186,6 +186,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     learning_languages = serializers.SerializerMethodField()
     followers_count = serializers.SerializerMethodField()
     following_count = serializers.SerializerMethodField()
+    friends_count = serializers.SerializerMethodField()
     last_seen_display = serializers.SerializerMethodField()
     date_joined = serializers.SerializerMethodField(source='user.date_joined')
     subscription = serializers.SerializerMethodField()
@@ -199,13 +200,17 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'learning_languages', 'status', 'is_premium', 'xp', 'level', 'streak',
             'total_speak_time', 'total_rooms_joined', 'is_online', 'last_seen', 
             'last_seen_display', 'following', 'followers_count', 'following_count',
-            'date_joined','subscription','current_streak','daily_xp','weekly_practice_hours'
+            'friends_count','date_joined','subscription','current_streak','daily_xp',
+            'weekly_practice_hours'
         ]
     def get_followers_count(self, obj):
         return obj.followers.count()
     
     def get_following_count(self, obj):
         return obj.following.count()
+
+    def get_friends_count(self, obj):
+        return obj.following.filter(following=obj).distinct().count()
     
     def get_last_seen_display(self, obj):
         if obj.last_seen:
@@ -283,18 +288,7 @@ class ResendOTPSerializer(serializers.Serializer):
         
 
 
-class FriendshipSerializer(serializers.ModelSerializer):
-    from_user_email = serializers.EmailField(source='from_user.email', read_only=True)
-    to_user_email = serializers.EmailField(source='to_user.email', read_only=True)
 
-    class Meta:
-        model = Friendship
-        fields = [
-            'id', 'from_user', 'from_user_email',
-            'to_user', 'to_user_email',
-            'status', 'created_at'
-        ]
-        read_only_fields = ['created_at']
 
 class PasswordResetOTPVerifySerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -509,4 +503,51 @@ class UserSubscriptionHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = UserSubscriptionHistory
         fields = ['id', 'plan', 'start_date', 'end_date', 'payment_id', 'payment_status']
+
+
+class FollowersProfileSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source='users.username',read_only="True")
+    class Meta:
+        model = UserProfile
+        fields = ['id','avatar','level']
+
+
+class FollowListSerializer(serializers.ModelSerializer):
+    followers = UserProfileSerializer(many=True,read_only=True)
+    following = UserProfileSerializer(many=True,read_only=True)
+
+    class Meta:
+        model = UserProfile
+        fields = ['followers','following']
+        
+class FollowCardSerializer(serializers.ModelSerializer):
+    username = serializers.SerializerMethodField()
+    relationship_state = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserProfile
+        fields = ['id','unique_id','avatar','level','is_online',
+        'is_premium','username','relationship_state']
+
+    def _viewer(self):
+        return self.context.get('viewer_profile')
+     
+    def get_username(self, obj):
+        user = getattr(obj,'user',None)
+        return user.username if user else obj.unique_id
+    
+    def get_relationship_state(self, obj):
+        viewer = self._viewer()
+        if not viewer:
+            return 'none'
+        following = viewer.is_following(obj)      # I follow them?
+        follower = viewer.is_followed_by(obj)     # They follow me?
+        if following and follower:
+            return 'friend'
+        if following:
+            return 'following'
+        if follower:
+            return 'follower'
+        return 'none'
+
         

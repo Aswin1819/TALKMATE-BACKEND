@@ -48,6 +48,24 @@ class UserProfile(models.Model):
         self.level = self.xp // 7200 + 1
         self.save()
 
+    def follow_user(self,user_profile):
+        self.following.add(user_profile)
+
+    def unfollow_user(self, user_profile):
+        self.following.remove(user_profile)
+
+    def is_following(self, user_profile):
+        return self.following.filter(id=user_profile.id).exists()
+
+    def is_followed_by(self,user_profile):
+        return self.followers.filter(id=user_profile.id).exists()
+
+    def mutual_friends_qs(self):
+        return self.following.filter(follow=self).distinct()
+    
+    def friends_count(self):
+        return self.mutual_friends_qs().count()
+
 class UserLanguage(models.Model):
     class Proficiency(models.TextChoices):
         BEGINNER = 'beginner', 'Beginner'

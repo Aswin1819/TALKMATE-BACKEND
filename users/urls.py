@@ -8,7 +8,6 @@ from .views import *
 router = DefaultRouter()
 # router.register('profiles', UserProfileViewSet, basename='userprofile')
 router.register('languages', LanguageViewSet, basename='language')
-router.register('friendships', FriendshipViewSet, basename='friendship')
 router.register('subscription', SubscriptionPlanViewSet, basename='subscription')
 
 
@@ -40,7 +39,12 @@ urlpatterns = [
     path('payment/create-order/', CreateRazorpayOrder.as_view()),
     path('payment/verify/', VerifyRazorpayPayment.as_view()),
     #subscriptions
-    path('subscription-history/', UserSubscriptionHistoryView.as_view(), name='subscription-history')
+    path('subscription-history/', UserSubscriptionHistoryView.as_view(), name='subscription-history'),
+    #Followers
+    path('follow/<int:target_user_id>/', FollowUserView.as_view(), name='follow-user'),
+    path('unfollow/<int:target_user_id>/', UnfollowUserView.as_view(), name='unfollow-user'),
+    path('followers/', MyFollowersView.as_view(), name='my-followers'),
+    path('following/', MyFollowingView.as_view(), name='my-following'),
     
     # other user routes...
 ]

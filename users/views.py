@@ -313,9 +313,9 @@ class LanguageViewSet(ModelViewSet):
     
     
     
-class FriendshipViewSet(ModelViewSet):
-    queryset = Friendship.objects.all()
-    serializer_class = FriendshipSerializer
+# class FriendshipViewSet(ModelViewSet):
+#     queryset = Friendship.objects.all()
+#     serializer_class = FriendshipSerializer
 
 class OTPVerifyView(APIView):
     permission_classes = [AllowAny]
@@ -682,3 +682,87 @@ class UserSubscriptionHistoryView(APIView):
         return Response(serializer.data)
 
     
+class FollowUserView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self,request,target_user_id):
+        current_profile = request.user.userprofile
+        target_user_profile = get_object_or_404(UserProfile,user__id=target_user_id)
+
+        if current_profile == target_user_profile:
+            return Response({'error':'you cannot follow yourself'},status=status.HTTP_400_BAD_REQUEST)
+        
+        if current_profile.is_following(target_user_profile):
+            return Response({'message':'Already following'},status=status.HTTP_200_OK)
+        
+        current_profile.follow_user(target_user_profile)
+        return Response({'message':'Followed Successfully'},status=status.HTTP_200_OK)
+
+class UnfollowUserView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self,request,target_user_id):
+        current_profile = request.user.userprofile
+        target_user_profile = get_object_or_404(UserProfile,user__id=target_user_id)
+
+        if not current_profile.is_following(target_user_profile):
+            return Response({'error':'Not following this user'},status=status.HTTP_400_BAD_REQUEST)
+
+        current_profile.unfollow_user(target_user_profile)
+        return Response({'message':"Unfollowed Successfully"},status=status.HTTP_200_OK)
+
+class MyFollowersView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profile = request.user.userprofile
+        followers = profile.followers.all()
+        serializer = UserProfileSerializer(followers, many=True)
+        return Response(serializer.data)
+
+
+class MyFollowingView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profile = request.user.userprofile
+        following = profile.following.all()
+        serializer = UserProfileSerializer(following, many=True)
+        return Response(serializer.data)        
+        
+class BaseSocialListView(APIView):
+    permission_classes = [IsAuthenticated]
+    relation_attr = None  # 'followers' | 'following' | 'friends'
+
+    def get_queryset(self, profile):
+        if self.relation_attr == 'followers':
+            return profile.followers.all().select_related('user')
+        if self.relation_attr == 'following':
+            return profile.following.all().select_related('user')
+        if self.relation_attr == 'friends':
+            return profile.mutual_friends_qs().select_related('user')
+        return UserProfile.objects.none()
+
+    def get(self, request, *args, **kwargs):
+        user_id = request.query_params.get('user_id')
+        if user_id:
+            profile = get_object_or_404(UserProfile, user__id=user_id)
+        else:
+            profile = request.user.userprofile
+
+        qs = self.get_queryset(profile)
+        paginator = SocialListPagination()
+        page = paginator.paginate_queryset(qs, request)
+
+        serializer = FollowCardSerializer(page, many=True, context={'viewer_profile': request.user.userprofile})
+        return paginator.get_paginated_response(serializer.data)
+
+class FollowersListView(BaseSocialListView):
+    relation_attr = 'followers'
+
+class FollowingListView(BaseSocialListView):
+    relation_attr = 'following'
+
+class FriendsListView(BaseSocialListView):
+    relation_attr = 'friends'
+
