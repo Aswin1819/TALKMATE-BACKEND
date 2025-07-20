@@ -171,6 +171,16 @@ class LanguageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Language
         fields = ['id','name','code']
+    
+    def validate_name(self, value):
+        if self.instance:
+            if Language.objects.filter(name__iexact=value).exclude(id=self.instance.id).exists():
+                raise serializers.ValidationError("Language with this name already exists")
+        else:
+            if Language.objects.filter(name__iexact=value).exists():
+                raise serializers.ValidationError("Language with this name already exists")
+        return value
+        
         
 class UserLanguageSerializer(serializers.ModelSerializer):
     language = LanguageSerializer()

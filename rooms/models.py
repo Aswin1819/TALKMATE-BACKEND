@@ -89,11 +89,23 @@ class ReportedRoom(models.Model):
         ('dismissed', 'Dismissed'),
         ('suspend', 'suspend'),
     ]
+    
+    REASON_CHOICES = [
+        ('spam', 'Spam or unwanted messages'),
+        ('misbehavior', 'Inappropriate behavior'),
+        ('harassment', 'Harassment or bullying'),
+        ('inappropriate_content', 'Inappropriate content'),
+        ('fake_identity', 'Fake identity or impersonation'),
+        ('disruptive', 'Disrupting conversations'),
+        ('hate_speech', 'Hate speech or discrimination'),
+        ('other', 'Other (please specify)')
+    ]
 
     room = models.ForeignKey(Room, on_delete=models.CASCADE)
     reported_by = models.ForeignKey(User, related_name='reports_made', on_delete=models.SET_NULL, null=True)
     reported_user = models.ForeignKey(User, related_name='reports_received', on_delete=models.SET_NULL, null=True)
-    reason = models.TextField()
+    reason = models.CharField(max_length=50, choices=REASON_CHOICES)  # Changed from TextField
+    custom_description = models.TextField(blank=True, null=True)  # New field
     timestamp = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
 

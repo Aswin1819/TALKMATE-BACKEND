@@ -7,10 +7,28 @@ class TagSerializer(serializers.ModelSerializer):
         model = Tag
         fields = ['id', 'name', 'color']
 
+    def validate_name(self, value):
+        if self.instance:
+            if Tag.objects.filter(name__iexact=value).exclude(id=self.instance.id).exists():
+                raise serializers.ValidationError("Tag with this name already exists")
+        else:
+            if Tag.objects.filter(name__iexact=value).exists():
+                raise serializers.ValidationError("Tag with this name already exists")
+        return value
+
 class RoomTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoomType
         fields = ['id', 'name', 'description']
+    
+    def validate_name(self, value):
+        if self.instance:
+            if RoomType.objects.filter(name__iexact=value).exclude(id=self.instance.id).exists():
+                raise serializers.ValidationError("RoomType with this name already exists")
+        else:
+            if RoomType.objects.filter(name__iexact=value).exists():
+                raise serializers.ValidationError("RoomType with this name already exists")
+        return value
 
 class RoomParticipantSerializer(serializers.ModelSerializer):
     user_id = serializers.IntegerField(source='user.id', read_only=True)
@@ -98,7 +116,21 @@ class MessageSerializer(serializers.ModelSerializer):
 
 
 class ReportedRoomSerializer(serializers.ModelSerializer):
+    reason = serializers.ChoiceField(choices=ReportedRoom.REASON_CHOICES)
+    custom_description = serializers.CharField(
+        max_length=500, 
+        required=False, 
+        allow_blank=True,
+        allow_null=True  # Allow null values
+    )
+
     class Meta:
         model = ReportedRoom
-        fields = ['id', 'room', 'reported_by', 'reported_user', 'reason', 'timestamp', 'status']
-        read_only_fields = ['id', 'timestamp', 'status', 'reported_by','room', 'reported_user']
+        fields = ['reason', 'custom_description']
+
+    def validate(self, data):
+        if data.get('reason') == 'other' and not data.get('custom_description'):
+            raise serializers.ValidationError(
+                "Custom description is required when 'other' reason is selected"
+            )
+        return data

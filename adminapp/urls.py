@@ -35,4 +35,5 @@ urlpatterns = [
     #dashboard
     path('stats/', AdminStatsView.as_view(), name='admin_stats'),
     path('recent-activity/', AdminRecentActivityView.as_view(), name='admin_recent_activity'),
+    path('users/export/', AdminUserExportView.as_view(),name='admin_user_export'),
 ]

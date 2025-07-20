@@ -7,13 +7,18 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.contrib.auth import get_user_model
 from django.db.models import Q
+from django.core.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from .models import Room, RoomParticipant, Message, Tag, RoomType,UserActivity
 from .serializers import (
     RoomSerializer, CreateRoomSerializer, RoomParticipantSerializer,
     MessageSerializer, TagSerializer, RoomTypeSerializer,ReportedRoomSerializer
 )
 from datetime import timedelta
+
+User = get_user_model()
 
 class LiveRoomsListView(generics.ListAPIView):
     """
@@ -251,9 +256,27 @@ class ReportUserView(generics.CreateAPIView):
     def perform_create(self, serializer):
         room_id = self.kwargs['room_id']
         reported_user_id = self.kwargs['user_id']
+        
+        try:
+            room = Room.objects.get(id=room_id)
+            reported_user = User.objects.get(id=reported_user_id)
+            
+            # Check if reported user is actually in the room
+            if not room.participants.filter(user_id=reported_user_id).exists():
+                raise DRFValidationError("Reported user is not in this room")
+                
+            # Check if user is reporting themselves
+            if reported_user_id == self.request.user.id:
+                raise DRFValidationError("You cannot report yourself")
+                
+        except Room.DoesNotExist:
+            raise DRFValidationError("Room not found")
+        except User.DoesNotExist:
+            raise DRFValidationError("Reported user not found")
+        
         serializer.save(
-            room=Room.objects.get(id=room_id),
+            room=room,
             reported_by=self.request.user,
-            reported_user_id=reported_user_id,
+            reported_user=reported_user,  # Use the User object, not ID
             status='pending'
         )

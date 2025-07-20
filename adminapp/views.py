@@ -1,18 +1,26 @@
+from io import BytesIO
 from .serializers import *
 from datetime import timedelta
+from reportlab.lib import colors
 from django.utils import timezone
 from django.db.models import Count, Q
+from django.http import HttpResponse
 from users.models import Notification
+from reportlab.lib.units import inch
+from datetime import datetime, timedelta
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
+from reportlab.lib.pagesizes import letter, A4
 from .pagination import AdminDefaultPagination
 from rest_framework.permissions import IsAuthenticated
-from users.utils import set_auth_cookies, clear_auth_cookies
 from rest_framework.pagination import PageNumberPagination
+from users.utils import set_auth_cookies, clear_auth_cookies
 from rest_framework import status, permissions,generics,viewsets
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rooms.models import Room, RoomParticipant, Message, Tag, RoomType,ReportedRoom
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from users.models import CustomUser, UserProfile, Language, SubscriptionPlan,UserSubscription
 
 class AdminLoginView(TokenObtainPairView):
@@ -352,6 +360,7 @@ class AdminStatsView(APIView):
     def get(self, request):
         if not request.user.is_superuser:
             return Response({'error': 'Unauthorized'}, status=403)
+        
         total_users = CustomUser.objects.filter(is_superuser=False).count()
         active_rooms = Room.objects.filter(status='live', is_deleted=False).count()
         premium_users = UserProfile.objects.filter(is_premium=True).count()
@@ -361,45 +370,86 @@ class AdminStatsView(APIView):
         # Monthly (last 12 months)
         months = []
         user_growth = []
+        subscription_growth = []
+        subscription_months = []
+        
         for i in range(11, -1, -1):
             month_start = (today.replace(day=1) - timedelta(days=30*i)).replace(day=1)
             month_end = (month_start + timedelta(days=32)).replace(day=1)
-            count = CustomUser.objects.filter(
+            
+            # User registrations
+            user_count = CustomUser.objects.filter(
                 is_superuser=False,
                 date_joined__gte=month_start,
                 date_joined__lt=month_end
             ).count()
+            
+            # Premium subscriptions
+            subscription_count = UserSubscription.objects.filter(
+                start_date__gte=month_start,
+                start_date__lt=month_end
+            ).count()
+            
             months.append(month_start.strftime('%b %Y'))
-            user_growth.append(count)
+            user_growth.append(user_count)
+            subscription_growth.append(subscription_count)
+            subscription_months.append(month_start.strftime('%b %Y'))
 
         # Weekly (last 6 weeks)
         weeks = []
         week_growth = []
+        week_subscription_growth = []
+        week_subscription_labels = []
+        
         for i in range(5, -1, -1):
             week_start = today - timedelta(days=today.weekday() + 7*i)
             week_end = week_start + timedelta(days=7)
-            count = CustomUser.objects.filter(
+            
+            # User registrations
+            user_count = CustomUser.objects.filter(
                 is_superuser=False,
                 date_joined__gte=week_start,
                 date_joined__lt=week_end
             ).count()
-            # Use ISO week number for label
+            
+            # Premium subscriptions
+            subscription_count = UserSubscription.objects.filter(
+                start_date__gte=week_start,
+                start_date__lt=week_end
+            ).count()
+            
             weeks.append(week_start.isocalendar()[1])
-            week_growth.append(count)
+            week_growth.append(user_count)
+            week_subscription_growth.append(subscription_count)
+            week_subscription_labels.append(f'W{week_start.isocalendar()[1]}')
 
         # Daily (last 31 days)
         days = []
         day_growth = []
+        day_subscription_growth = []
+        day_subscription_labels = []
+        
         for i in range(30, -1, -1):
             day = today - timedelta(days=i)
             next_day = day + timedelta(days=1)
-            count = CustomUser.objects.filter(
+            
+            # User registrations
+            user_count = CustomUser.objects.filter(
                 is_superuser=False,
                 date_joined__gte=day,
                 date_joined__lt=next_day
             ).count()
+            
+            # Premium subscriptions
+            subscription_count = UserSubscription.objects.filter(
+                start_date__gte=day,
+                start_date__lt=next_day
+            ).count()
+            
             days.append(day.strftime('%Y-%m-%d'))
-            day_growth.append(count)
+            day_growth.append(user_count)
+            day_subscription_growth.append(subscription_count)
+            day_subscription_labels.append(day.strftime('%m/%d'))
 
         return Response({
             'total_users': total_users,
@@ -412,6 +462,12 @@ class AdminStatsView(APIView):
             'weeks': weeks,
             'day_growth': day_growth,
             'days': days,
+            'subscription_growth': subscription_growth,
+            'subscription_months': subscription_months,
+            'week_subscription_growth': week_subscription_growth,
+            'week_subscription_labels': week_subscription_labels,
+            'day_subscription_growth': day_subscription_growth,
+            'day_subscription_labels': day_subscription_labels,
         })
 
 class AdminRecentActivityView(APIView):
@@ -448,3 +504,100 @@ class AdminRecentActivityView(APIView):
         # Sort by time descending
         activities = sorted(activities, key=lambda x: x['time'], reverse=True)[:10]
         return Response({'recent_activity': activities})
+
+
+class AdminUserExportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.is_superuser:
+            return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+        
+        period = request.GET.get('period', 'all')
+        
+        # Filter users based on period
+        queryset = CustomUser.objects.filter(is_superuser=False)
+        
+        if period == 'this_week':
+            start_date = timezone.now().date() - timedelta(days=timezone.now().weekday())
+            queryset = queryset.filter(date_joined__date__gte=start_date)
+        elif period == 'last_month':
+            last_month = timezone.now().date().replace(day=1) - timedelta(days=1)
+            start_date = last_month.replace(day=1)
+            end_date = timezone.now().date().replace(day=1)
+            queryset = queryset.filter(date_joined__date__gte=start_date, date_joined__date__lt=end_date)
+        
+        # Get user data with related profile info
+        users_data = []
+        for user in queryset.select_related('userprofile'):
+            profile = getattr(user, 'userprofile', None)
+            users_data.append([
+                user.id,
+                user.username,
+                user.email,
+                user.date_joined.strftime('%Y-%m-%d') if user.date_joined else 'N/A',
+                profile.status if profile else 'N/A',
+                profile.level if profile else 'N/A',
+                'Yes' if profile and profile.is_premium else 'No',
+                'Yes' if user.is_verified else 'No'
+            ])
+        
+        # Generate PDF
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        elements = []
+        
+        # Title
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=16,
+            spaceAfter=30,
+            alignment=1  # Center alignment
+        )
+        
+        period_text = {
+            'this_week': 'This Week',
+            'last_month': 'Last Month',
+            'all': 'All Time'
+        }.get(period, 'All Time')
+        
+        title = Paragraph(f"User Report - {period_text}", title_style)
+        elements.append(title)
+        elements.append(Spacer(1, 20))
+        
+        # Table data
+        table_data = [
+            ['ID', 'Username', 'Email', 'Joined Date', 'Status', 'Level', 'Premium', 'Verified']
+        ] + users_data
+        
+        # Create table
+        table = Table(table_data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]))
+        
+        elements.append(table)
+        
+        # Build PDF
+        doc.build(elements)
+        buffer.seek(0)
+        
+        # Create response
+        response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="users-{period}-{datetime.now().strftime("%Y-%m-%d")}.pdf"'
+        
+        return response

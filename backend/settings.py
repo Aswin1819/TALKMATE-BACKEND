@@ -227,12 +227,15 @@ if not DEBUG:
 # Channels Configuration
 ASGI_APPLICATION = 'backend.asgi.application'
 
-# Channel Layers Configuration (Redis)
+
+REDIS_HOST = config('REDIS_HOST', default='redis')
+REDIS_PORT = config('REDIS_PORT', default=6379, cast=int)
+
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [('127.0.0.1', 6379)],
+            "hosts": [(REDIS_HOST, REDIS_PORT)],
         },
     },
 }

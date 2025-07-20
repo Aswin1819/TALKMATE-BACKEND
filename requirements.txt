@@ -8,3 +8,15 @@ psycopg2-binary==2.9.10
 PyJWT==2.9.0
 sqlparse==0.5.3
 tzdata==2025.2
+python-decouple
+cloudinary
+channels
+channels_redis
+django-cloudinary-storage
+razorpay
+google-auth
+python-dotenv
+setuptools
+daphne
+
+
