@@ -8,6 +8,7 @@ router.register('roomtypes', views.RoomTypeViewSet, basename='roomtypes')
 urlpatterns = [
     # Room Management
     path('live/', views.LiveRoomsListView.as_view(), name='live-rooms'),
+    path('<int:room_id>/edit/', views.EditRoomView.as_view(),name='edit-room'),
     path('create/', views.CreateRoomView.as_view(), name='create-room'),
     path('<int:room_id>/', views.RoomDetailView.as_view(), name='room-detail'),
     path('<int:room_id>/join/', views.JoinRoomView.as_view(), name='join-room'),

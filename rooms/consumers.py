@@ -533,10 +533,11 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 room.save()
             
 
-
+    @database_sync_to_async
     def calculate_stats_on_leave(self, participant):
         from .models import UserActivity
-        
+        from datetime import timedelta
+
         now = timezone.now()
         participant.left_at = now
         participant.save()
@@ -545,7 +546,7 @@ class RoomConsumer(AsyncWebsocketConsumer):
         minutes = max(1, int(duration // 60))
 
         profile = participant.user.userprofile
-        profile.total_speak_time = (profile.total_speak_time or 0) + minutes
+        profile.total_speak_time = (profile.total_speak_time or timedelta()) + timedelta(minutes=minutes)
         profile.xp += minutes * 20
         profile.level = profile.xp // 1000 + 1
         profile.save()

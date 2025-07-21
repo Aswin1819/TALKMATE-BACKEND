@@ -34,6 +34,7 @@ class CustomUserSerializer(serializers.ModelSerializer):
             return {
                 'avatar': profile.avatar,
                 'level': profile.level,
+                'is_premium':profile.is_premium,
                 'followers': profile.followers.count(),
                 'following': profile.following.count(),
                 'friends': friends_count,
@@ -78,6 +79,7 @@ class GoogleLoginSerializer(serializers.Serializer):
             profile=user.userprofile
             avatar=profile.avatar
             level=profile.level
+            is_premium=profile.is_premium
             followers_count=profile.followers.count()
             following_count=profile.following.count()
             friends_count=Friendship.objects.filter(
@@ -94,6 +96,7 @@ class GoogleLoginSerializer(serializers.Serializer):
                 'username': user.username,
                 'email': user.email,
                 'is_verified': user.is_verified,
+                'is_premium': is_premium,
                 'avatar': avatar,
                 'level': level,
                 'followers_count': followers_count,
@@ -136,6 +139,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         # Get avatar from UserProfile
         avatar = None
+        is_premium = None
         followers_count = 0
         following_count = 0
         friends_count = 0
@@ -144,6 +148,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             profile = self.user.userprofile
             avatar = profile.avatar
             level = profile.level
+            is_premium = profile.is_premium
             followers_count = profile.followers.count()
             following_count = profile.following.count()
             friends_count = Friendship.objects.filter(
@@ -158,6 +163,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 'username': self.user.username,
                 'email': self.user.email,
                 'is_verified': self.user.is_verified,
+                'is_premium':is_premium,
                 'avatar': avatar,
                 'level': level,
                 'followers_count': followers_count,

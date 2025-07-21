@@ -14,9 +14,13 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from .models import Room, RoomParticipant, Message, Tag, RoomType,UserActivity
 from .serializers import (
     RoomSerializer, CreateRoomSerializer, RoomParticipantSerializer,
-    MessageSerializer, TagSerializer, RoomTypeSerializer,ReportedRoomSerializer
+    MessageSerializer, TagSerializer, RoomTypeSerializer,ReportedRoomSerializer,
+    EditRoomSerializer
+
 )
 from datetime import timedelta
+import logging
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -28,6 +32,7 @@ class LiveRoomsListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
+        logger.info(f"Fetching live rooms for user %s",self.request.user)
         queryset = Room.objects.filter(
             status='live',
             # is_private=False,
@@ -84,6 +89,25 @@ class CreateRoomView(APIView):
         response_serializer = RoomSerializer(room)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
+class EditRoomView(generics.UpdateAPIView):
+    serializer_class = EditRoomSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        room_id = self.kwargs['room_id']
+        room = get_object_or_404(Room,id=room_id,host=self.request.user)
+        return room
+    
+    def perform_update(self, serializer):
+        is_private = self.request.data.get('is_private', None)
+        if is_private and not self.request.user.is_premium:
+            raise DRFValidationError("Only premium users can create private rooms")
+        serializer.save()
+
+    def patch(self, request, *args, **kwargs):
+        response = super().patch(request, *args, **kwargs)
+        room = self.get_object()
+        return Response(RoomSerializer(room).data)
 
 
 class RoomDetailView(generics.RetrieveAPIView):
@@ -135,22 +159,24 @@ class LeaveRoomView(generics.CreateAPIView):
     
     def post(self, request, room_id):
         try:
-            print("Inside try")
+            logger.info("User %s is attempting to leave room %s", request.user, room_id)
             participant = RoomParticipant.objects.get(
                 user=request.user,
                 room_id=room_id,
                 left_at__isnull=True
             )
-            print("After participant")
+            logger.info("RoomParticipant found for user %s in room %s", request.user, room_id)
             now = timezone.now()
             participant.left_at = now
             participant.save()
+            logger.debug("Participant left_at updated for user %s in room %s", request.user, room_id)
 
             # Calculate session duration
             session_duration = (participant.left_at - participant.joined_at)
             minutes = int(session_duration.total_seconds() // 60)
             if minutes < 1:
                 minutes = 1
+            logger.debug("Session duration for user %s in room %s: %d minutes", request.user, room_id, minutes)
 
             # Update user profile
             profile = request.user.userprofile
@@ -159,20 +185,24 @@ class LeaveRoomView(generics.CreateAPIView):
             profile.level = profile.xp // 1000 + 1
             profile.total_rooms_joined += 1
             profile.save()
+            logger.info("User profile updated for user %s after leaving room %s", request.user, room_id)
 
             # Log daily activity for streaks and stats
             today = now.date()
             activity, _ = UserActivity.objects.get_or_create(user=request.user, date=today)
             activity.xp_earned += minutes * 20
             activity.practice_minutes += minutes
-            print("PracticeMinutes:",activity.practice_minutes)
+            logger.debug("UserActivity updated: XP=%d, Minutes=%d for user %s on %s", activity.xp_earned, activity.practice_minutes, request.user, today)
             activity.save()
-            print("till activity executed")
+            logger.info("User %s successfully left room %s and stats updated", request.user, room_id)
 
             return Response({'message': 'Left room, stats updated.'})
         except RoomParticipant.DoesNotExist:
-            print("error in leave room view")
+            logger.warning("User %s tried to leave room %s but was not a participant", request.user, room_id)
             return Response({'error': 'Not in room.'}, status=400)
+        except Exception as e:
+            logger.error("Unexpected error when user %s tried to leave room %s: %s", request.user, room_id, str(e), exc_info=True)
+            return Response({'error': 'An unexpected error occurred.'}, status=500)
 
 class RoomParticipantsView(generics.ListAPIView):
     """

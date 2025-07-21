@@ -99,6 +99,17 @@ class CreateRoomSerializer(serializers.ModelSerializer):
         
         return room
 
+class EditRoomSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=Room
+        fields = ['title', 'description', 'is_private', 'room_type', 'language', 'tags', 'max_participants']
+    
+    def validate(self, data):
+        user = self.context['request'].user
+        if data.get('is_private') and not user.is_premium:
+            raise serializers.ValidationError("Only premium users can create rooms")
+        return data
+
 class MessageSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     avatar = serializers.SerializerMethodField()
