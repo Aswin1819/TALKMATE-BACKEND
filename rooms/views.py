@@ -99,8 +99,9 @@ class EditRoomView(generics.UpdateAPIView):
         return room
     
     def perform_update(self, serializer):
+        user = self.request.user
         is_private = self.request.data.get('is_private', None)
-        if is_private and not self.request.user.is_premium:
+        if is_private and not user.userprofile.is_premium:
             raise DRFValidationError("Only premium users can create private rooms")
         serializer.save()
 
@@ -152,6 +153,41 @@ class JoinRoomView(APIView):
             participant.save()
 
         return Response({'message': 'Joined room successfully'}, status=200)
+
+
+class RecentlyJoinedRoomsView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+
+        participants = RoomParticipant.objects.filter(
+            user=user,
+            room__status='live',
+            room__is_deleted=False
+        ).order_by('-joined_at')[:3]
+        rooms = [p.room for p in participants]
+        serializer = RoomSerializer(rooms, many=True)
+        return Response(serializer.data)
+
+
+
+class SuggestedRoomsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        # Exclude rooms the user is already a participant in
+        joined_room_ids = RoomParticipant.objects.filter(
+            user=user
+            ).values_list('room_id', flat=True)
+        rooms = Room.objects.filter(
+            status='live',
+            is_deleted=False
+        ).exclude(id__in=joined_room_ids).order_by('-created_at')[:5]
+        serializer = RoomSerializer(rooms, many=True)
+        return Response(serializer.data)
+
 
 
 class LeaveRoomView(generics.CreateAPIView):
@@ -310,3 +346,4 @@ class ReportUserView(generics.CreateAPIView):
             reported_user=reported_user,  # Use the User object, not ID
             status='pending'
         )
+

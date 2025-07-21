@@ -52,19 +52,26 @@ class RoomSerializer(serializers.ModelSerializer):
     tags = TagSerializer(many=True, read_only=True)
     room_type_name = serializers.CharField(source='room_type.name', read_only=True)
     language_name = serializers.CharField(source='language.name', read_only=True)
+    host_avatar = serializers.SerializerMethodField()
     
     class Meta:
         model = Room
         fields = [
-            'id', 'title', 'description', 'host', 'host_username',
+            'id', 'title', 'description', 'host', 'host_username','host_avatar',
             'room_type', 'room_type_name', 'language', 'language_name',
             'tags', 'max_participants', 'participant_count', 'is_private',
-            'status', 'created_at', 'started_at'
+            'status', 'created_at', 'started_at',
         ]
         read_only_fields = ['host', 'created_at', 'started_at']
     
     def get_participant_count(self, obj):
         return obj.participants.filter(left_at__isnull=True).count()
+    
+    def get_host_avatar(self, obj):
+        try:
+            return obj.host.userprofile.avatar
+        except:
+            return None
 
 class CreateRoomSerializer(serializers.ModelSerializer):
     tag_ids = serializers.ListField(
@@ -101,14 +108,26 @@ class CreateRoomSerializer(serializers.ModelSerializer):
 
 class EditRoomSerializer(serializers.ModelSerializer):
     class Meta:
-        model=Room
-        fields = ['title', 'description', 'is_private', 'room_type', 'language', 'tags', 'max_participants']
-    
+        model = Room
+        fields = [
+            'title', 'description', 'is_private', 'room_type', 'language',
+            'tags', 'max_participants', 'password'
+        ]
+
     def validate(self, data):
         user = self.context['request'].user
-        if data.get('is_private') and not user.is_premium:
+        if data.get('is_private') and not user.userprofile.is_premium:
             raise serializers.ValidationError("Only premium users can create rooms")
         return data
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if password:
+            instance.set_password(password)  # Hash and set the password
+        instance.save()
+        return instance
 
 class MessageSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
