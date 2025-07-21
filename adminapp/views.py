@@ -7,6 +7,7 @@ from django.db.models import Count, Q
 from django.http import HttpResponse
 from users.models import Notification
 from reportlab.lib.units import inch
+from reportlab.lib.colors import blue
 from datetime import datetime, timedelta
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -546,9 +547,22 @@ class AdminUserExportView(APIView):
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4)
         elements = []
+
+        #project name heading in blue
+        styles = getSampleStyleSheet()
+        project_heading_style = ParagraphStyle(
+            'ProjectHeading',
+            parent=styles['Heading1'],
+            fontSize=20,
+            textColor=blue,
+            alignment=1,
+            spaceAfter=10,
+        )
+        project_heading = Paragraph('TalkMate',project_heading_style)
+        elements.append(project_heading)
+
         
         # Title
-        styles = getSampleStyleSheet()
         title_style = ParagraphStyle(
             'CustomTitle',
             parent=styles['Heading1'],

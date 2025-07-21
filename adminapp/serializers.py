@@ -150,18 +150,34 @@ class AdminRoomEditSerializer(serializers.ModelSerializer):
 
 class AdminReportedRoomSerializer(serializers.ModelSerializer):
     reporter = serializers.CharField(source='reported_by.username', read_only=True)
+    reporterAvatar = serializers.SerializerMethodField()
     reported = serializers.CharField(source='reported_user.username', read_only=True)
+    reportedAvatar = serializers.SerializerMethodField()
     roomName = serializers.CharField(source='room.title', read_only=True)
     roomId = serializers.IntegerField(source='room.id', read_only=True)
     reporterId = serializers.IntegerField(source='reported_by.id', read_only=True)
     reportedId = serializers.IntegerField(source='reported_user.id', read_only=True)
+    reasonLabel = serializers.SerializerMethodField()
 
     class Meta:
         model = ReportedRoom
         fields = [
-            'id', 'reason', 'reporter', 'reported', 'roomName', 'roomId',
+            'id', 'reason','reasonLabel', 'reporter','reporterAvatar', 'reported','reportedAvatar', 'roomName', 'roomId',
             'reporterId', 'reportedId', 'timestamp', 'status'
         ]
+
+    def get_reporterAvatar(self, obj):
+        if obj.reported_by and hasattr(obj.reported_by, 'userprofile'):
+            return obj.reported_by.userprofile.avatar
+        return None
+
+    def get_reportedAvatar(self, obj):
+        if obj.reported_user and hasattr(obj.reported_user, 'userprofile'):
+            return obj.reported_user.userprofile.avatar
+        return None
+
+    def get_reasonLabel(self, obj):
+        return obj.get_reason_display()
 
 class SubscriptionPlanSerializer(serializers.ModelSerializer):
     class Meta:
