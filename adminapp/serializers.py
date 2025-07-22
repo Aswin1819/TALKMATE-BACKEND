@@ -1,9 +1,10 @@
 from rest_framework import serializers
-from users.models import CustomUser, UserProfile, UserLanguage, SubscriptionPlan,UserSubscription
+from users.models import CustomUser, UserProfile, UserLanguage, SubscriptionPlan,UserSubscription,Notification
 from rooms.models import *
 from rooms.serializers import TagSerializer, RoomParticipantSerializer
 from django.utils import timezone
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.utils.timesince import timesince
 
 class AdminLoginSerializer(TokenObtainPairSerializer):
     @classmethod
@@ -212,3 +213,12 @@ class UserSubscriptionSerializer(serializers.ModelSerializer):
         if obj.end_date and obj.end_date < timezone.now():
             return "expired"
         return "active"
+
+class AdminNotificationSerializer(serializers.ModelSerializer):
+    time = serializers.SerializerMethodField()
+    class Meta:
+        model = Notification
+        fields = ['id', 'type', 'title', 'message', 'is_read', 'created_at', 'link', 'time']
+
+    def get_time(self, obj):
+        return timesince(obj.created_at) + ' ago'

@@ -615,3 +615,12 @@ class AdminUserExportView(APIView):
         response['Content-Disposition'] = f'attachment; filename="users-{period}-{datetime.now().strftime("%Y-%m-%d")}.pdf"'
         
         return response
+
+
+class AdminNotificationListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        notifications = Notification.objects.filter(user__is_superuser=True).order_by('-created_at')[:50]
+        serializer = AdminNotificationSerializer(notifications, many=True)
+        return Response(serializer.data)

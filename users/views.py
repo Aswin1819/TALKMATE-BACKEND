@@ -22,7 +22,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from django.contrib.auth.password_validation import validate_password
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-from .utils import generate_and_send_otp,set_auth_cookies,clear_auth_cookies
+from .utils import generate_and_send_otp,set_auth_cookies,clear_auth_cookies,send_notification
 from rest_framework_simplejwt.views import TokenObtainPairView,TokenRefreshView
 
 User = get_user_model()
@@ -88,21 +88,6 @@ class GoogleLoginView(APIView):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 class RegisterView(APIView):
     permission_classes = [AllowAny]
     
@@ -119,7 +104,16 @@ class RegisterView(APIView):
         serializer = CustomUserSerializer(data=data)
         if serializer.is_valid():
             user = serializer.save()
-            
+            #Notify all admins
+            for admin in User.objects.filter(is_superuser=True):
+                send_notification(
+                    user=admin,
+                    notif_type=Notification.NotificationType.USER_REGISTRATION,
+                    title="New User Registered",
+                    message=f"{user.username} has just registered",
+                    link=f"/admin/users/"
+                )
+
             generate_and_send_otp(user)
 
             user_data = serializer.data
@@ -301,22 +295,12 @@ class CurrentUserView(APIView):
     
 
 
-
-
-
-# class UserProfileViewSet(ModelViewSet):
-#     queryset = UserProfile.objects.all()
-#     serializer_class = UserProfileSerializer
     
 class LanguageViewSet(ModelViewSet):
     queryset = Language.objects.all()
     serializer_class = LanguageSerializer
     
     
-    
-# class FriendshipViewSet(ModelViewSet):
-#     queryset = Friendship.objects.all()
-#     serializer_class = FriendshipSerializer
 
 class OTPVerifyView(APIView):
     permission_classes = [AllowAny]
@@ -658,6 +642,15 @@ class VerifyRazorpayPayment(APIView):
             profile = get_object_or_404(UserProfile, user=request.user)
             profile.is_premium = new_plan.price > 0
             profile.save()
+            #notifyin admin about new subscription
+            for admin in User.objects.filter(is_superuser=True):
+                send_notification(
+                    user=admin,
+                    notif_type=Notification.NotificationType.SYSTEM_UPDATE,
+                    title="New Subscription",
+                    message=f"{request.user.username} purchased the {new_plan.name} plan.",
+                    link=f"/admin/subscriptions/"
+                )
 
             return Response({
                 "message": "Subscription upgraded",
@@ -697,6 +690,14 @@ class FollowUserView(APIView):
             return Response({'message':'Already following'},status=status.HTTP_200_OK)
         
         current_profile.follow_user(target_user_profile)
+        # Notify the followed user
+        send_notification(
+            user=target_user_profile.user,
+            notif_type=Notification.NotificationType.OTHER,  # Or create a FOLLOW type if you want
+            title="New Follower",
+            message=f"{request.user.username} started following you.",
+            link=None  # Or the route to the follower's profile
+        )
         return Response({'message':'Followed Successfully'},status=status.HTTP_200_OK)
 
 class UnfollowUserView(APIView):
@@ -786,6 +787,14 @@ class SocialFollowUserView(APIView):
         if not viewer.is_following(target):
             viewer.follow_user(target)
             msg = 'Followed successfully.'
+            # Notify the followed user
+            send_notification(
+                user=target.user,
+                notif_type=Notification.NotificationType.OTHER,  # Or create a FOLLOW type if you want
+                title="New Follower",
+                message=f"{request.user.username} started following you.",
+                link=None  # Or the route to the follower's profile
+            )
         else:
             msg = 'Already following.'
 

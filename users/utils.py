@@ -3,29 +3,12 @@ from datetime import timedelta
 import random
 from django.core.mail import send_mail
 from django.conf import settings
-from .models import OTP  
+from .models import OTP,Notification
 import cloudinary.uploader
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 
-# def generate_and_send_otp(user):
-#     code = f"{random.randint(100000, 999999)}"
-#     expires_at = timezone.now() + timedelta(minutes=2)
-    
-#     OTP.objects.create(
-#         user=user,
-#         code=code,
-#         expires_at=expires_at
-#     )
-
-#     send_mail(
-#         subject="Your TalkMate OTP Code",
-#         message=f"Your OTP code is {code}. It will expire in 2 minutes.",
-#         from_email=settings.DEFAULT_FROM_EMAIL,
-#         recipient_list=[user.email],
-#         fail_silently=False,
-#     )
     
 def generate_and_send_otp(user):
     code = f"{random.randint(100000, 999999)}"
@@ -168,3 +151,13 @@ def upload_avatar_to_cloudinary(file, folder='avatars'):
     except Exception as e:
         print(f"Error uploading to Cloudinary: {e}")
         return None
+
+
+def send_notification(user, notif_type, title, message, link=None):
+    Notification.objects.create(
+        user=user,
+        type=notif_type,
+        title=title,
+        message=message,
+        link=link
+    )
