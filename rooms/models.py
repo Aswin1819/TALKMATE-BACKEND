@@ -36,11 +36,16 @@ class Room(models.Model):
     is_private = models.BooleanField(default=False)
     password = models.CharField(max_length=250, blank=True, null=True)
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     started_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='live')
-    is_deleted = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='live', db_index=True)
+    is_deleted = models.BooleanField(default=False, db_index=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['status', 'is_deleted']),
+        ]
     
     def set_password(self,raw_password):
         self.password = make_password(raw_password)
@@ -58,14 +63,19 @@ class RoomParticipant(models.Model):
     
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='participants')
-    role = models.CharField(max_length=20, choices=Role.choices, default='participant')
+    role = models.CharField(max_length=20, choices=Role.choices, default='participant', db_index=True)
 
-    joined_at = models.DateTimeField(auto_now_add=True)
-    left_at = models.DateTimeField(null=True, blank=True)
+    joined_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    left_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
     is_muted = models.BooleanField(default=False)
     hand_raised = models.BooleanField(default=False)
     video_enabled = models.BooleanField(default=False)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['room', 'user']),
+        ]
 
 class Message(models.Model):
     MESSAGE_TYPES = [
@@ -78,8 +88,13 @@ class Message(models.Model):
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     content = models.TextField()
     message_type = models.CharField(max_length=10, choices=MESSAGE_TYPES, default='text')
-    sent_at = models.DateTimeField(auto_now_add=True)
-    is_deleted = models.BooleanField(default=False)
+    sent_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    is_deleted = models.BooleanField(default=False, db_index=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['room', 'sent_at']),
+        ]
     
     
 class ReportedRoom(models.Model):
@@ -106,8 +121,8 @@ class ReportedRoom(models.Model):
     reported_user = models.ForeignKey(User, related_name='reports_received', on_delete=models.SET_NULL, null=True)
     reason = models.CharField(max_length=50, choices=REASON_CHOICES)  # Changed from TextField
     custom_description = models.TextField(blank=True, null=True)  # New field
-    timestamp = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True)
 
     def __str__(self):
         return f"Report on {self.reported_user} by {self.reported_by} in {self.room}"

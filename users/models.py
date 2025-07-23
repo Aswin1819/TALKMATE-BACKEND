@@ -12,8 +12,8 @@ def generate_unique_id():
 
 class CustomUser(AbstractUser):
     email = models.EmailField(unique=True)
-    is_verified = models.BooleanField(default=False)
-    is_google_login = models.BooleanField(default=False)
+    is_verified = models.BooleanField(default=False, db_index=True)
+    is_google_login = models.BooleanField(default=False, db_index=True)
     
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
@@ -33,14 +33,14 @@ class UserProfile(models.Model):
     unique_id = models.CharField(max_length=10,unique=True,default=generate_unique_id)
     avatar = models.URLField(blank=True,null=True)
     bio = models.TextField(blank=True)
-    status = models.CharField(max_length=20,choices=Status.choices,default=Status.ACTIVE)
-    is_premium = models.BooleanField(default=False)
+    status = models.CharField(max_length=20,choices=Status.choices,default=Status.ACTIVE, db_index=True)
+    is_premium = models.BooleanField(default=False, db_index=True)
     xp = models.IntegerField(default=0)
     level = models.IntegerField(default=1)
     streak = models.IntegerField(default=0)
     total_speak_time = models.DurationField(default=timedelta)
     total_rooms_joined = models.IntegerField(default=0)
-    is_online = models.BooleanField(default=False)
+    is_online = models.BooleanField(default=False, db_index=True)
     last_seen = models.DateTimeField(null=True,blank=True)
     following = models.ManyToManyField('self',symmetrical=False,related_name='followers',blank=True)
     
@@ -84,10 +84,10 @@ class UserLanguage(models.Model):
     
 class OTP(models.Model):
     user = models.ForeignKey(CustomUser,on_delete=models.CASCADE)
-    code = models.CharField(max_length=50)
+    code = models.CharField(max_length=50, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
-    is_used = models.BooleanField(default=False)
+    expires_at = models.DateTimeField(db_index=True)
+    is_used = models.BooleanField(default=False, db_index=True)
     
     def is_expired(self):
         return timezone.now() > self.expires_at
@@ -101,7 +101,7 @@ class Friendship(models.Model):
     from_user = models.ForeignKey(CustomUser, related_name='friendships_sent', on_delete=models.CASCADE)
     to_user = models.ForeignKey(CustomUser, related_name='friendships_received', on_delete=models.CASCADE)
     
-    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -151,11 +151,12 @@ class Notification(models.Model):
     type = models.CharField(
         max_length=30,
         choices=NotificationType.choices,
-        default=NotificationType.OTHER
+        default=NotificationType.OTHER,
+        db_index=True
     )
     title = models.CharField(max_length=255)
     message = models.TextField(blank=True)
-    is_read = models.BooleanField(default=False)
+    is_read = models.BooleanField(default=False, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     link = models.URLField(blank=True, null=True, help_text='Optional link to redirect on click')
 
@@ -183,10 +184,10 @@ class UserSubscription(models.Model):
     
     start_date = models.DateTimeField(auto_now_add=True)
     end_date = models.DateTimeField()
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True, db_index=True)
 
     payment_id = models.CharField(max_length=255, blank=True, null=True)  
-    payment_status = models.CharField(max_length=50, default='pending') 
+    payment_status = models.CharField(max_length=50, default='pending', db_index=True) 
 
     def __str__(self):
         return f"{self.user.username} - {self.plan.name}"
@@ -197,7 +198,7 @@ class UserSubscriptionHistory(models.Model):
     start_date = models.DateTimeField()
     end_date = models.DateTimeField()
     payment_id = models.CharField(max_length=255,blank=True,null=True)
-    payment_status = models.CharField(max_length=50,default='paid')
+    payment_status = models.CharField(max_length=50,default='paid', db_index=True)
     
     def __str__(self):
         return f"{self.user.username} - {self.plan.name} (History)"
