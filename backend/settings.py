@@ -244,3 +244,13 @@ CHANNEL_LAYERS = {
 #razorpay setttings
 RAZORPAY_KEY_ID = config('RAZORPAY_KEY_ID')
 RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET')
+
+CACHES = {
+    'default':{
+        "BACKEND":"django_redis.cache.RedisCache",
+        "LOCATION":f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
+        "OPTIONS":{
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}

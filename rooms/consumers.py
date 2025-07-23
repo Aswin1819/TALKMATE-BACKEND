@@ -9,42 +9,32 @@ logger = logging.getLogger(__name__)
 class RoomConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         from django.contrib.auth.models import AnonymousUser
-        print("A")
         self.room_id = self.scope['url_route']['kwargs']['room_id']
         self.room_group_name = f'room_{self.room_id}'
         self.user = self.scope['user']
-        print("user:",self.user)
-        print("room_id:",self.room_id)
-        print("B")
         # Check if user is authenticated
         if isinstance(self.user, AnonymousUser):
             await self.close()
             return
-        print("C")
         # Check if room exists and user can join
         room_access = await self.check_room_access()
         if not room_access:
             await self.close()
             return
-        print("D")
         #Multiple join prevention
         # already_joined = await self.user_has_active_room()
         # print("already_joined:",already_joined)
         # if already_joined:
         #     await self.close()
         #     return 
-        print("E")    
         # Join room group
         await self.channel_layer.group_add(
             self.room_group_name,
             self.channel_name
         )
-        print("F")
         await self.accept()
-        print("G")
         # Add user as participant
         await self.add_participant()
-        print("H")
         # Notify others about new participant
         await self.channel_layer.group_send(
             self.room_group_name,
@@ -55,13 +45,10 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 'message': f'{self.user.username} joined the room'
             }
         )
-        print("I")
         # Send current room state to new user
         await self.send_room_state()
-        print("J")
         # Request audio connections with existing participants
         await self.request_audio_connections()
-        print("K")
     async def disconnect(self, close_code):
         if hasattr(self, 'room_group_name'):
             

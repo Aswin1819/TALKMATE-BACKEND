@@ -1,4 +1,5 @@
 import re
+import logging
 from .models import *
 from django.db.models import Q
 from datetime import timedelta,date
@@ -13,7 +14,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from django.contrib.auth.password_validation import validate_password
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-
+logger = logging.getLogger(__name__)
 
 class CustomUserSerializer(serializers.ModelSerializer):
     profile_summary = serializers.SerializerMethodField()
@@ -155,7 +156,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 (Q(from_user=self.user) | Q(to_user=self.user)) & Q(status='accepted')
             ).count()
         except UserProfile.DoesNotExist:
-            print("UserProfile does not exist for user:", self.user.id)
+            ("UserProfile does not exist for user:", self.user.id)
 
         data.update({
             'user': {
@@ -276,7 +277,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
         week_ago = today - timedelta(days=6)
         activities = UserActivity.objects.filter(user=user, date__gte=week_ago, date__lte=today)
         total_minutes = sum(a.practice_minutes for a in activities)
-        print("total_minutes:",total_minutes)
         return round(total_minutes / 60, 1)
     
     
@@ -375,12 +375,9 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
         fields = ['avatar', 'bio', 'native_languages', 'learning_languages']
 
     def update(self, instance, validated_data):
-        print("=== UserProfileUpdateSerializer.update called ===")
-        print("Validated data:", validated_data)
         avatar_file = validated_data.pop('avatar', None)
         if avatar_file:
             avatar_url = upload_avatar_to_cloudinary(avatar_file)
-            print("Cloudinary returned URL:", avatar_url)
             instance.avatar = avatar_url
 
         # Update bio
@@ -413,7 +410,6 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
                 )
 
         instance.save()
-        print("Instance after save. Avatar URL:", instance.avatar)
         return instance
 
 

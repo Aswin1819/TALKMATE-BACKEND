@@ -1,6 +1,9 @@
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.contrib.auth.models import AnonymousUser
+import logging
+
+logger = logging.getLogger(__name__)
 
 class CookieJWTAuthentication(JWTAuthentication):
 
@@ -17,18 +20,17 @@ class CookieJWTAuthentication(JWTAuthentication):
             request.COOKIES.get('admin_access_token')
         )
         if raw_token is None:
-            print(f"No access_token or admin_access_token cookie found. Available cookies: {list(request.COOKIES.keys())}")
+            logger.info("No access_token or admin_access_token cookie found")
             return None
             
-        print(f"Found access token in cookie: {raw_token[:20]}...")
             
         try:
             # Validate the token
             validated_token = self.get_validated_token(raw_token)
             user = self.get_user(validated_token)
-            print(f"Cookie auth successful for user: {user}")
+            logger.info(f"Cookie auth successful for user: {user}")
             return (user, validated_token)
         except Exception as e:
-            print(f"Cookie auth failed: {e}")
+            logger.info(f"Cookie auth failed: {e}")
             return None
         

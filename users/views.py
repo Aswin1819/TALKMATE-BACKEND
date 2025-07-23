@@ -7,6 +7,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from google.oauth2 import id_token
+from django.core.cache import cache
 from rest_framework.views import APIView
 from google.auth.transport import requests
 from decimal import Decimal, ROUND_HALF_UP
@@ -22,8 +23,12 @@ from rest_framework.exceptions import AuthenticationFailed
 from django.contrib.auth.password_validation import validate_password
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-from .utils import generate_and_send_otp,set_auth_cookies,clear_auth_cookies,send_notification
 from rest_framework_simplejwt.views import TokenObtainPairView,TokenRefreshView
+from .utils import generate_and_send_otp,set_auth_cookies,clear_auth_cookies,send_notification
+import logging
+
+# Set up logger for this module
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -131,21 +136,18 @@ class CustomLoginView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
     def post(self, request, *args, **kwargs):
-        print("=== CustomLoginView POST called ===")
-        print("Request data:", request.data)
         serializer = self.get_serializer(data=request.data)
 
         try:
             serializer.is_valid(raise_exception=True)
-            print("Serializer valid. User:", serializer.user)
-            print("Serializer data:", serializer.validated_data)
         except AuthenticationFailed as e:
+            logger.warning(f"Authentication failed: {e}")
             return Response(
                 {'detail': str(e)}, 
                 status=status.HTTP_403_FORBIDDEN
             )
         except Exception as e:
-            print("Serializer error:", str(e))
+            logger.error(f"Serializer error: {str(e)}")
             return Response(
                 {'detail': 'Invalid credentials or user inactive'}, 
                 status=status.HTTP_401_UNAUTHORIZED
@@ -188,16 +190,10 @@ class CustomTokenRefreshView(TokenRefreshView):
     
     def post(self, request, *args, **kwargs):
         # Debug prints
-        print("=== TOKEN REFRESH DEBUG ===")
-        print(f"Request method: {request.method}")
-        print(f"Request data: {request.data}")
-        print(f"Request cookies: {dict(request.COOKIES)}")
-        print(f"Content-Type: {request.content_type}")
         
         # Try to get refresh token from cookie if not in request body
         if 'refresh' not in request.data:
             refresh_token = request.COOKIES.get('refresh_token')
-            print(f"Refresh token from cookie: {refresh_token}")
             
             if refresh_token:
                 if hasattr(request, '_mutable'):
@@ -208,9 +204,9 @@ class CustomTokenRefreshView(TokenRefreshView):
                 
                 # Update request data
                 request._full_data = data
-                print(f"Updated request data: {data}")
+                logger.debug(f"Updated request data: {data}")
             else:
-                print("No refresh token found in cookies")
+                logger.warning("No refresh token found in cookies")
                 return Response(
                     {'detail': 'No refresh token found'}, 
                     status=status.HTTP_400_BAD_REQUEST
@@ -218,16 +214,13 @@ class CustomTokenRefreshView(TokenRefreshView):
         
         try:
             response = super().post(request, *args, **kwargs)
-            print(f"Super response status: {response.status_code}")
-            print(f"Super response data: {response.data}")
+
             
             if response.status_code == 200:
                 # Get new tokens
                 access_token = response.data.get('access')
                 refresh_token = response.data.get('refresh')  # If rotation is enabled
                 
-                print(f"New access token: {access_token[:20]}..." if access_token else "No access token")
-                print(f"New refresh token: {refresh_token[:20]}..." if refresh_token else "No refresh token")
                 
                 # Update cookies
                 if refresh_token:  # If refresh token rotation is enabled
@@ -261,7 +254,7 @@ class CustomTokenRefreshView(TokenRefreshView):
             return response
             
         except (TokenError, InvalidToken) as e:
-            print(f"Token error: {e}")
+            logger.error(f"Token error: {e}")
             # Clear invalid cookies
             response = Response(
                 {'detail': f'Invalid or expired refresh token: {str(e)}'}, 
@@ -270,10 +263,10 @@ class CustomTokenRefreshView(TokenRefreshView):
             clear_auth_cookies(response)
             return response
         except Exception as e:
-            print(f"Unexpected error: {e}")
-            print(f"Error type: {type(e)}")
+            logger.error(f"Unexpected error: {e}")
+            logger.error(f"Error type: {type(e)}")
             import traceback
-            traceback.print_exc()
+            logger.error(traceback.format_exc())
             return Response(
                 {'detail': f'Unexpected error: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -289,7 +282,6 @@ class CurrentUserView(APIView):
     
     def get(self,request):
         serializer = CustomUserSerializer(request.user)
-        print("Current user serializer data:", serializer.data)
         return Response({'user':serializer.data})
         
     
@@ -307,26 +299,26 @@ class OTPVerifyView(APIView):
     def post(self,request):
         email = request.data.get('email')
         code = request.data.get('code')
-        print(f"Received email:{email}, code:{code}")
+        logger.debug(f"Received email:{email}, code:{code}")
         try:
             user = CustomUser.objects.get(email=email)
-            print(f"found user:{user}")
+            logger.debug(f"found user:{user}")
             otp_obj = OTP.objects.filter(user=user,code=code,is_used=False).latest('created_at')
-            print("found otp_obj:{otp_obj}")
+            logger.debug(f"found otp_obj:{otp_obj}")
             if otp_obj.is_expired():
-                print("otp is expired")
+                logger.warning("otp is expired")
                 return Response({'error':'OTP expired'},status=400)
             otp_obj.is_used = True
             otp_obj.save()
             user.is_verified = True
             user.save()
-            print("otp verified")
+            logger.info("otp verified")
             return Response({'message':'OTP verified Successfully'})
         except CustomUser.DoesNotExist:
-            print("User not found")
+            logger.warning("User not found")
             return Response({'error':'User not found'},status=400)  
         except OTP.DoesNotExist:
-            print("invalid otp")
+            logger.warning("invalid otp")
             return Response({'error':'Invalid OTP'},status=400)
         
         
@@ -397,13 +389,18 @@ class CurrentUserProfileView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self,request):
+        cache_key = f"user_profile_{request.user.id}"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            logger.info("User Profile is Fetching from cached data")
+            return Response(cached_data)
         try:
             profile = request.user.userprofile
         except UserProfile.DoesNotExist:
             return Response({'error':'Profile not found'},status=status.HTTP_404_NOT_FOUND)
-        serializers = UserProfileSerializer(profile)
-        # print("Serializers data:", serializers.data)
-        return Response(serializers.data) # removed the wrapping of profile key.
+        serializer = UserProfileSerializer(profile)
+        cache.set(cache_key, serializer.data, timeout=60*10)  # cache for 10 minutes
+        return Response(serializer.data)
 
 
 class UpdateUserProfileView(APIView):
@@ -418,30 +415,29 @@ class UpdateUserProfileView(APIView):
         serializer = UserProfileUpdateSerializer(profile, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
-            return Response(UserProfileSerializer(profile).data)
+            # Invalidate and refresh cache
+            cache_key = f"user_profile_{request.user.id}"
+            # cache.delete(cache_key)
+            new_data = UserProfileSerializer(profile).data
+            cache.set(cache_key, new_data, timeout=60*10)
+            return Response(new_data)
         return Response(serializer.errors, status=400)
     
     def put(self, request):
-        print("=== PUT /profile/update/ called ===")
-        print("Request user:", request.user)
-        print("Request user authenticated:", request.user.is_authenticated)
-        print("Request content-type:", request.content_type)
-        print("Request data:", request.data)
-        print("Request FILES:", request.FILES)
         try:
             profile = request.user.userprofile
-            print("Found user profile:", profile)
         except UserProfile.DoesNotExist:
-            print("UserProfile not found for user:", request.user)
             return Response({'error': 'Profile not found'}, status=404)
         serializer = UserProfileUpdateSerializer(profile, data=request.data, partial=True)
-        print("Serializer initialized. Is valid?", serializer.is_valid())
         if not serializer.is_valid():
-            print("Serializer errors:", serializer.errors)
             return Response(serializer.errors, status=400)
         serializer.save()
-        print("Profile updated successfully. New avatar URL:", profile.avatar)
-        return Response({'profile': UserProfileSerializer(profile).data})
+        # Invalidate and refresh cache
+        cache_key = f"user_profile_{request.user.id}"
+        # cache.delete(cache_key)
+        new_data = UserProfileSerializer(profile).data
+        cache.set(cache_key, new_data, timeout=60*10)
+        return Response({'profile': new_data})
         
 class ProficiencyChoicesView(APIView):
     permission_classes = [IsAuthenticated]
