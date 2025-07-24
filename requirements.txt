@@ -18,5 +18,9 @@ google-auth
 python-dotenv
 setuptools
 daphne
+celery
+redis
+reportlab
+django_redis
 
 

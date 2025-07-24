@@ -7,6 +7,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from google.oauth2 import id_token
+from .tasks import send_otp_email_task
 from django.core.cache import cache
 from rest_framework.views import APIView
 from google.auth.transport import requests
@@ -119,7 +120,7 @@ class RegisterView(APIView):
                     link=f"/admin/users/"
                 )
 
-            generate_and_send_otp(user)
+            send_otp_email_task.delay(user.id)
 
             user_data = serializer.data
             user_data.pop('password', None)
@@ -328,7 +329,7 @@ class ResendOTPView(APIView):
         if serializer.is_valid():
             user = serializer.context['user']
             
-            generate_and_send_otp(user)  
+            send_otp_email_task.delay(user.id)  
 
             return Response({"message": "OTP sent successfully."}, status=status.HTTP_200_OK)
 
@@ -370,7 +371,7 @@ class PasswordResetResendOTPView(APIView):
         serializer = PasswordResetResendOTPSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.context['user']
-            generate_and_send_otp(user)
+            send_otp_email_task.delay(user.id)
             return Response({'message': 'OTP resent successfully.'})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
