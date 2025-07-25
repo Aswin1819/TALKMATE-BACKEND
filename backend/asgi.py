@@ -21,11 +21,9 @@ from rooms.routing import websocket_urlpatterns
 
 application = ProtocolTypeRouter({
     "http": get_asgi_application(),
-    "websocket": AllowedHostsOriginValidator(
-        JWTAuthMiddleware(
+    "websocket": JWTAuthMiddleware(
             URLRouter(
                 websocket_urlpatterns
             )
-        )
-    ),
+        ),
 })

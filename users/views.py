@@ -120,7 +120,7 @@ class RegisterView(APIView):
                     link=f"/admin/users/"
                 )
 
-            send_otp_email_task.delay(user.id)
+            transaction.on_commit(send_otp_email_task.delay(user.id))
 
             user_data = serializer.data
             user_data.pop('password', None)

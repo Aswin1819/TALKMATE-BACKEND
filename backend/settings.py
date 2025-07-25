@@ -69,17 +69,19 @@ if DEBUG:
         "http://127.0.0.1:5173",
         "http://localhost:3001",  # Add any other frontend ports you might use
         "http://127.0.0.1:3001",
+        "https://talkmate.aswinskumar.space",
     ]
 else:
     CORS_ALLOWED_ORIGINS = [
-        # Add your production frontend URLs here
-        # "https://yourdomain.com",
+        "https://talkmate.aswinskumar.space"
+
     ]
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://talkmate.aswinskumar.space",
 ]
 
 # Allow specific methods
