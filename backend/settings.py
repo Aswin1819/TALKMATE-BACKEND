@@ -23,7 +23,7 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = ["*"] if DEBUG else [config('ALLOWED_HOSTS', default='').split(',')]
+ALLOWED_HOSTS = ["*"] if DEBUG else config('ALLOWED_HOSTS', default='').split(',')
 AUTH_USER_MODEL = 'users.CustomUser'
 
 # Application definition
