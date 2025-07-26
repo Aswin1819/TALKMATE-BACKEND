@@ -164,6 +164,12 @@ DATABASES = {
     }
 }
 
+# Authentication backends
+AUTHENTICATION_BACKENDS = [
+    'users.backends.EmailBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {

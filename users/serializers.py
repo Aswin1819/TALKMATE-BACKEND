@@ -133,11 +133,15 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
 
     def validate(self, attrs):
-
-        username = attrs.get('username')
+        # Get email from the request (frontend sends email)
+        email = attrs.get('email')
         password = attrs.get('password')
 
-        user = authenticate(username=username, password=password)
+        if not email or not password:
+            raise AuthenticationFailed("Email and password are required.")
+
+        # Authenticate using email as username
+        user = authenticate(username=email, password=password)
 
         if user is None:
             raise AuthenticationFailed("Invalid credentials provided.")
