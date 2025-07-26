@@ -6,7 +6,6 @@ from datetime import timedelta,date
 from rooms.models import UserActivity
 from rest_framework import serializers
 from django.utils.timesince import timesince
-from django.contrib.auth import authenticate
 from .utils import upload_avatar_to_cloudinary
 from django.core.exceptions import ValidationError
 from django.contrib.auth.hashers import make_password
@@ -48,15 +47,6 @@ class CustomUserSerializer(serializers.ModelSerializer):
             if not re.match(r'^[A-Za-z]+( [A-Za-z]+)*$', value):
                 raise serializers.ValidationError("Username must contain only letters and spaces between words.")
             return value
-
-    def validate(self, attrs):
-        user = self.instance or self.context.get('user')
-        if user:
-            if not user.is_active:
-                raise serializers.ValidationError("Your account has been banned by the admin.")
-            if not user.is_verified:
-                raise serializers.ValidationError("Your email is not verified yet. Please verify to continue.")
-        return attrs
     
     def create(self, validated_data):
         validated_data['password'] = make_password(validated_data['password'])
@@ -133,38 +123,20 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
 
     def validate(self, attrs):
-        # Get email from the request (frontend sends email)
-        email = attrs.get('email')
-        password = attrs.get('password')
-
-        if not email or not password:
-        raise AuthenticationFailed("Email and password are required.")
-
-        # Manually fetch user by email
         try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            raise AuthenticationFailed("Invalid credentials provided.")  # No such email
+            data = super().validate(attrs)
+        except Exception as e:
+            raise AuthenticationFailed("Invalid credentials provided.")
 
-        # Check if user is_active
-        if not user.is_active:
-            raise AuthenticationFailed("Your account has been blocked by the admin.")
-
-        # Check if email is verified
-        if not user.is_verified:
+        # Additional user validation
+        if not self.user.is_verified:
             raise AuthenticationFailed("Email is not verified. Please verify your account.")
-
-        # Check if superuser
-        if user.is_superuser:
+        
+        if not self.user.is_active:
+            raise AuthenticationFailed("Your account has been blocked by the admin.")
+        
+        if self.user.is_superuser:
             raise AuthenticationFailed("Superusers cannot log in through this endpoint.")
-
-        # Now authenticate (this checks the password)
-        user = authenticate(username=email, password=password)
-        if user is None:
-            raise AuthenticationFailed("Invalid credentials provided.")  # wrong password
-
-        self.user = user  # Required for TokenObtainPairSerializer
-        data = super().validate(attrs)
 
         # Get avatar from UserProfile
         avatar = None
