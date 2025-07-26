@@ -20,7 +20,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.permissions import AllowAny
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.exceptions import AuthenticationFailed,APIException
 from django.contrib.auth.password_validation import validate_password
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -141,17 +141,17 @@ class CustomLoginView(TokenObtainPairView):
 
         try:
             serializer.is_valid(raise_exception=True)
-        except AuthenticationFailed as e:
-            logger.warning(f"Authentication failed: {e}")
+        except APIException as e:
+            logger.warning(f"Auth error: {str(e)}")
             return Response(
-                {'detail': str(e)}, 
-                status=status.HTTP_403_FORBIDDEN
+                {'detail': str(e)},
+                status=e.status_code if hasattr(e, 'status_code') else status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            logger.error(f"Serializer error: {str(e)}")
+            logger.error(f"Unexpected error: {str(e)}")
             return Response(
-                {'detail': 'Invalid credentials or user inactive'}, 
-                status=status.HTTP_401_UNAUTHORIZED
+                {'detail': 'Unexpected error occurred'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
         # Get tokens and user data
@@ -324,6 +324,7 @@ class OTPVerifyView(APIView):
         
         
 class ResendOTPView(APIView):
+    permission_classes = [AllowAny]
     def post(self, request):
         serializer = ResendOTPSerializer(data=request.data)
         if serializer.is_valid():
