@@ -6,6 +6,7 @@ from datetime import timedelta,date
 from rooms.models import UserActivity
 from rest_framework import serializers
 from django.utils.timesince import timesince
+from django.contrib.auth import authenticate
 from .utils import upload_avatar_to_cloudinary
 from django.core.exceptions import ValidationError
 from django.contrib.auth.hashers import make_password
@@ -132,20 +133,27 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
 
     def validate(self, attrs):
-        try:
-            data = super().validate(attrs)
-        except Exception as e:
+
+        username = attrs.get('username')
+        password = attrs.get('password')
+
+        user = authenticate(username=username, password=password)
+
+        if user is None:
             raise AuthenticationFailed("Invalid credentials provided.")
 
-        # Additional user validation
-        if not self.user.is_verified:
+        if not user.is_verified:
             raise AuthenticationFailed("Email is not verified. Please verify your account.")
-        
-        if not self.user.is_active:
+
+        if not user.is_active:
             raise AuthenticationFailed("Your account has been blocked by the admin.")
-        
-        if self.user.is_superuser:
+
+        if user.is_superuser:
             raise AuthenticationFailed("Superusers cannot log in through this endpoint.")
+
+        # Assign to self.user manually before calling super
+        self.user = user
+        data = super().validate(attrs)
 
         # Get avatar from UserProfile
         avatar = None
