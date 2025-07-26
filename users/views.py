@@ -51,7 +51,7 @@ class GoogleLoginView(APIView):
                 raise AuthenticationFailed('Invalid audience')
 
             email = idinfo.get('email')
-            name = idinfo.get('given_name')[:5] if idinfo.get('given_name') else 'User'
+            name = idinfo.get('given_name') if idinfo.get('given_name') else 'User'#sliciing removed
 
             user, created = User.objects.get_or_create(
                 email=email,
@@ -329,7 +329,7 @@ class ResendOTPView(APIView):
         if serializer.is_valid():
             user = serializer.context['user']
             
-            send_otp_email_task.delay(user.id)  
+            transaction.on_commit(lambda: send_otp_email_task.delay(user.id))  
 
             return Response({"message": "OTP sent successfully."}, status=status.HTTP_200_OK)
 
@@ -371,7 +371,7 @@ class PasswordResetResendOTPView(APIView):
         serializer = PasswordResetResendOTPSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.context['user']
-            send_otp_email_task.delay(user.id)
+            transaction.on_commit(lambda: send_otp_email_task.delay(user.id))
             return Response({'message': 'OTP resent successfully.'})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

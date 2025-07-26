@@ -47,6 +47,15 @@ class CustomUserSerializer(serializers.ModelSerializer):
             if not re.match(r'^[A-Za-z]+( [A-Za-z]+)*$', value):
                 raise serializers.ValidationError("Username must contain only letters and spaces between words.")
             return value
+
+    def validate(self, attrs):
+        user = self.instance or self.context.get('user')
+        if user:
+            if not user.is_active:
+                raise serializers.ValidationError("Your account has been banned by the admin.")
+            if not user.is_verified:
+                raise serializers.ValidationError("Your email is not verified yet. Please verify to continue.")
+        return attrs
     
     def create(self, validated_data):
         validated_data['password'] = make_password(validated_data['password'])
