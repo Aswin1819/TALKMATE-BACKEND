@@ -138,25 +138,32 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         password = attrs.get('password')
 
         if not email or not password:
-            raise AuthenticationFailed("Email and password are required.")
+        raise AuthenticationFailed("Email and password are required.")
 
-        # Authenticate using email as username
-        user = authenticate(username=email, password=password)
+        # Manually fetch user by email
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            raise AuthenticationFailed("Invalid credentials provided.")  # No such email
 
-        if user is None:
-            raise AuthenticationFailed("Invalid credentials provided.")
-
-        if not user.is_verified:
-            raise AuthenticationFailed("Email is not verified. Please verify your account.")
-
+        # Check if user is_active
         if not user.is_active:
             raise AuthenticationFailed("Your account has been blocked by the admin.")
 
+        # Check if email is verified
+        if not user.is_verified:
+            raise AuthenticationFailed("Email is not verified. Please verify your account.")
+
+        # Check if superuser
         if user.is_superuser:
             raise AuthenticationFailed("Superusers cannot log in through this endpoint.")
 
-        # Assign to self.user manually before calling super
-        self.user = user
+        # Now authenticate (this checks the password)
+        user = authenticate(username=email, password=password)
+        if user is None:
+            raise AuthenticationFailed("Invalid credentials provided.")  # wrong password
+
+        self.user = user  # Required for TokenObtainPairSerializer
         data = super().validate(attrs)
 
         # Get avatar from UserProfile
