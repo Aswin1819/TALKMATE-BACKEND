@@ -49,11 +49,11 @@ def set_auth_cookies(response, access_token, refresh_token , access_cookie='acce
     samesite = 'None'
     domain = None  # Or your domain if needed
     
-    print(f"=== COOKIE SETTINGS DEBUG ===")
-    print(f"Secure: {secure}")
-    print(f"SameSite: {samesite}")
-    print(f"Domain: {domain}")
-    print(f"DEBUG mode: {settings.DEBUG}")
+    # print(f"=== COOKIE SETTINGS DEBUG ===")
+    # print(f"Secure: {secure}")
+    # print(f"SameSite: {samesite}")
+    # print(f"Domain: {domain}")
+    # print(f"DEBUG mode: {settings.DEBUG}")
 
     # Set access token cookie
     response.set_cookie(
@@ -79,7 +79,7 @@ def set_auth_cookies(response, access_token, refresh_token , access_cookie='acce
         domain=domain,
     )
 
-    print(f"Cookies set - {access_cookie}: {access_token[:20]}..., {refresh_cookie}: {refresh_token[:20]}...")
+    # print(f"Cookies set - {access_cookie}: {access_token[:20]}..., {refresh_cookie}: {refresh_token[:20]}...")
 
 
 def clear_auth_cookies(response):
@@ -99,10 +99,10 @@ def clear_auth_cookies(response):
     samesite = 'None'
     domain = None  # Or your domain if needed
     
-    print(f"=== CLEARING COOKIES DEBUG ===")
-    print(f"Secure: {secure}")
-    print(f"SameSite: {samesite}")
-    print(f"Domain: {domain}")
+    # print(f"=== CLEARING COOKIES DEBUG ===")
+    # print(f"Secure: {secure}")
+    # print(f"SameSite: {samesite}")
+    # print(f"Domain: {domain}")
     
     response.delete_cookie(
         'access_token',
@@ -129,7 +129,7 @@ def upload_avatar_to_cloudinary(file, folder='avatars'):
         print("No file provided to upload_avatar_to_cloudinary.")
         return None
 
-    print(f"Uploading file: {file} to Cloudinary in folder: {folder}")
+    # print(f"Uploading file: {file} to Cloudinary in folder: {folder}")
     try:
         response = cloudinary.uploader.upload(
             file,
@@ -141,10 +141,10 @@ def upload_avatar_to_cloudinary(file, folder='avatars'):
                 {'width': 200, 'height': 200, 'crop': 'fill', 'gravity': 'face'}
             ]
         )
-        print("Cloudinary upload response:", response)
+        # print("Cloudinary upload response:", response)
         url = response.get('secure_url')
         if url:
-            print("Successfully uploaded to Cloudinary. URL:", url)
+            print("Successfully uploaded to Cloudinary. URL:")
         else:
             print("Upload to Cloudinary succeeded but no URL returned.")
         return url
