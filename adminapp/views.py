@@ -127,23 +127,69 @@ class AdminUserStatusUpdateView(APIView):
     def post(self, request, user_id):
         if not request.user.is_superuser:
             return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+        
         user_profile = get_object_or_404(UserProfile, user__id=user_id)
         user = user_profile.user
         action = request.data.get('action')
+        
         if action == 'banned':
+            # Ban the user
             user_profile.status = 'banned'
             user.is_active = False
             user_profile.save()
             user.save()
+            
+            # NEW: Cleanup room participations
+            self.cleanup_room_participations(user)
+            
             return Response({"detail": "User banned."}, status=status.HTTP_200_OK)
+            
         elif action == 'active':
+            # Unban the user
             user_profile.status = 'active'
             user.is_active = True
             user_profile.save()
             user.save()
+            
             return Response({"detail": "User unbanned."}, status=status.HTTP_200_OK)
         else:
             return Response({"detail": "Invalid action."}, status=status.HTTP_400_BAD_REQUEST)
+    
+    def cleanup_room_participations(self, user):
+        """Cleanup all active room participations for banned user"""
+
+        
+        # Find all active participations
+        active_participations = RoomParticipant.objects.filter(
+            user=user,
+            left_at__isnull=True
+        )
+        
+        for participation in active_participations:
+            # Set leave time
+            participation.left_at = timezone.now()
+            participation.save()
+            
+            # Calculate session duration
+            duration = (participation.left_at - participation.joined_at).total_seconds()
+            minutes = max(1, int(duration // 60))
+            
+            # Update user profile stats
+            profile = user.userprofile
+            profile.total_speak_time = (profile.total_speak_time or timedelta()) + timedelta(minutes=minutes)
+            profile.xp += minutes * 20
+            profile.level = profile.xp // 1000 + 1
+            profile.save()
+            
+            # Update daily activity
+            from rooms.models import UserActivity
+            activity, _ = UserActivity.objects.get_or_create(
+                user=user, 
+                date=timezone.now().date()
+            )
+            activity.xp_earned += minutes * 20
+            activity.practice_minutes += minutes
+            activity.save()
 
 
 class AdminRoomListView(APIView):
