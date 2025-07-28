@@ -126,7 +126,7 @@ class RegisterView(APIView):
             user_data.pop('password', None)
 
             return Response({
-                'message': 'OTP successfully sent to your email',
+                'message': 'Otp has sent success full, check your mail for confirmation',
                 'user': user_data
             }, status=status.HTTP_201_CREATED)
 
