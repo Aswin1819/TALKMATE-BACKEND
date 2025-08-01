@@ -3,6 +3,7 @@ from django.db import models
 from datetime import timedelta
 import random,string
 from django.utils import timezone
+from django.db.models import Count
 
 def generate_unique_id():
     while True:
@@ -237,7 +238,6 @@ class ChatRoom(models.Model):
     
     @classmethod
     def get_or_create_room(cls, user1, user2):
-        # Find existing room with exactly these two participants
         existing_room = cls.objects.filter(
             participants=user1
         ).filter(
@@ -251,7 +251,6 @@ class ChatRoom(models.Model):
         if existing_room:
             return existing_room
         
-        # Create new room
         room = cls.objects.create()
         room.participants.add(user1, user2)
         return room
