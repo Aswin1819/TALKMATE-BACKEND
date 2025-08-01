@@ -16,7 +16,10 @@ from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 from rooms.middleware import JWTAuthMiddleware
 from channels.security.websocket import AllowedHostsOriginValidator
-from rooms.routing import websocket_urlpatterns
+from rooms.routing import websocket_urlpatterns as room_websocket_urlpatterns
+from users.routing import websocket_urlpatterns as user_websocket_urlpatterns
+
+websocket_urlpatterns = room_websocket_urlpatterns + user_websocket_urlpatterns
 
 
 application = ProtocolTypeRouter({

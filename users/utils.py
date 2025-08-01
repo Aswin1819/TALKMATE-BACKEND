@@ -8,7 +8,9 @@ import cloudinary.uploader
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
-
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+import json
     
 def generate_and_send_otp(user):
     code = f"{random.randint(100000, 999999)}"
@@ -84,17 +86,7 @@ def set_auth_cookies(response, access_token, refresh_token , access_cookie='acce
 
 def clear_auth_cookies(response):
     """Utility function to clear authentication cookies"""
-    # secure = getattr(settings, 'AUTH_COOKIE_SECURE', False)
-    # samesite = getattr(settings, 'AUTH_COOKIE_SAMESITE', 'Lax')
-    # domain = getattr(settings, 'AUTH_COOKIE_DOMAIN', None)
-    
-    # # Use same settings as set_auth_cookies for consistency
-    # if settings.DEBUG:
-    #     secure = False
-    #     samesite = 'Lax'  # Changed from 'None' to 'Lax'
-    # else:
-    #     secure = True
-    #     samesite = 'None'
+
     secure = True
     samesite = 'None'
     domain = None  # Or your domain if needed
@@ -160,4 +152,46 @@ def send_notification(user, notif_type, title, message, link=None):
         title=title,
         message=message,
         link=link
+    )
+
+
+def send_notification_to_user(user_id, notification_data):
+    """
+    Send real-time notification to a specific user via WebSocket
+    """
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f"user_{user_id}",
+        {
+            'type': 'notification_message',
+            'notification': notification_data
+        }
+    )
+
+def send_notification_count_update(user_id, count):
+    """
+    Send notification count update to a specific user
+    """
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f"user_{user_id}",
+        {
+            'type': 'notification_count_update',
+            'count': count
+        }
+    )
+
+def send_chat_message_to_user(user_id, message_data):
+    """
+    Send real-time chat message to a specific user via WebSocket
+    """
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f"user_{user_id}",
+        {
+            'type': 'chat_message',
+            'message': message_data['message'],
+            'sender_id': message_data['sender_id'],
+            'sender_username': message_data['sender_username']
+        }
     )

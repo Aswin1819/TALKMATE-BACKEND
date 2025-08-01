@@ -140,6 +140,10 @@ class Notification(models.Model):
         REPORT = 'report', 'New Report'
         USER_REGISTRATION = 'user_registration', 'New User Registration'
         SYSTEM_UPDATE = 'system_update', 'System Update'
+        FRIEND_REQUEST = 'friend_request', 'Friend Request'
+        ROOM_INVITE = 'room_invite', 'Room Invite'
+        NEW_FOLLOWER = 'new_follower', 'New Follower'
+        CHAT_MESSAGE = 'chat_message', 'New Chat Message'
         OTHER = 'other', 'Other'
 
     user = models.ForeignKey(
@@ -159,9 +163,24 @@ class Notification(models.Model):
     is_read = models.BooleanField(default=False, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     link = models.URLField(blank=True, null=True, help_text='Optional link to redirect on click')
+    related_user = models.ForeignKey(
+        CustomUser, 
+        on_delete=models.CASCADE, 
+        null=True, 
+        blank=True,
+        related_name='sent_notifications',
+        help_text='User who triggered this notification'
+    )
+    related_room = models.ForeignKey(
+        'rooms.Room',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text='Related room for room-specific notifications'
+    )
 
     def __str__(self):
-        return f"Notification to {self.user.username}: {self.title}"
+        return f"{self.user.username} - {self.title}"
 
     class Meta:
         ordering = ['-created_at']
@@ -202,6 +221,63 @@ class UserSubscriptionHistory(models.Model):
     
     def __str__(self):
         return f"{self.user.username} - {self.plan.name} (History)"
+
+
+class ChatRoom(models.Model):
+    participants = models.ManyToManyField(CustomUser, related_name='chat_rooms')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-updated_at']
+    
+    def __str__(self):
+        participant_names = [p.username for p in self.participants.all()]
+        return f"Chat between {', '.join(participant_names)}"
+    
+    @classmethod
+    def get_or_create_room(cls, user1, user2):
+        # Find existing room with exactly these two participants
+        existing_room = cls.objects.filter(
+            participants=user1
+        ).filter(
+            participants=user2
+        ).annotate(
+            participant_count=Count('participants')
+        ).filter(
+            participant_count=2
+        ).first()
+        
+        if existing_room:
+            return existing_room
+        
+        # Create new room
+        room = cls.objects.create()
+        room.participants.add(user1, user2)
+        return room
+
+class ChatMessage(models.Model):
+    MESSAGE_TYPES = [
+        ('text', 'Text'),
+        ('image', 'Image'),
+        ('file', 'File'),
+        ('emoji', 'Emoji')
+    ]
+    
+    chat_room = models.ForeignKey(ChatRoom, on_delete=models.CASCADE, related_name='messages')
+    sender = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    content = models.TextField()
+    message_type = models.CharField(max_length=10, choices=MESSAGE_TYPES, default='text')
+    sent_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    is_read = models.BooleanField(default=False, db_index=True)
+    
+    class Meta:
+        ordering = ['sent_at']
+    
+    def __str__(self):
+        return f"{self.sender.username}: {self.content[:50]}"
+
+
     
     
 
