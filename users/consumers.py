@@ -2,13 +2,13 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.utils import timezone
-from django.contrib.auth.models import AnonymousUser
 import logging
 
 logger = logging.getLogger(__name__)
 
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
+        from django.contrib.auth.models import AnonymousUser
         # Check if user is authenticated
         if isinstance(self.scope['user'], AnonymousUser):
             await self.close()
