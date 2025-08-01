@@ -299,6 +299,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
 class NotificationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         # Check if user is authenticated
+        from django.contrib.auth.models import AnonymousUser
         if isinstance(self.scope['user'], AnonymousUser):
             await self.close()
             return
@@ -442,3 +443,4 @@ class NotificationConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             logger.error(f"Error getting notification count: {e}")
             return 0
+# sample comment
