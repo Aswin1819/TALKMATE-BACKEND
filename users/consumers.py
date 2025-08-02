@@ -70,8 +70,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
         content = data.get('content', '').strip()
         message_type = data.get('message_type', 'text')
         
+        logger.info(f"DEBUG: Handling chat message from {self.user.username} to {recipient_id}")
+        logger.info(f"DEBUG: Content: '{content}', Type: {message_type}")
+        
         if not content or not recipient_id:
+            logger.info("DEBUG: Missing required fields")
             await self.send(text_data=json.dumps({
+                'type': 'error',
                 'error': 'Missing required fields'
             }))
             return
@@ -80,9 +85,22 @@ class ChatConsumer(AsyncWebsocketConsumer):
         message = await self.save_chat_message(recipient_id, content, message_type)
         
         if message:
+            logger.info(f"DEBUG: Message saved successfully with ID: {message['id']}")
+            
             # Send to recipient
             await self.channel_layer.group_send(
                 f"user_{recipient_id}",
+                {
+                    'type': 'chat_message',
+                    'message': message,
+                    'sender_id': self.user.id,
+                    'sender_username': self.user.username
+                }
+            )
+            
+            # IMPORTANT: Send message back to sender too!
+            await self.channel_layer.group_send(
+                f"user_{self.user.id}",
                 {
                     'type': 'chat_message',
                     'message': message,
@@ -95,7 +113,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({
                 'type': 'message_sent',
                 'message_id': message['id'],
-                'timestamp': message['sent_at']
+                'timestamp': message['sent_at'],
+                'status': 'success'
+            }))
+            logger.info(f"DEBUG: Confirmations sent for message {message['id']}")
+        else:
+            logger.info("DEBUG: Failed to save message")
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'error': 'Failed to save message'
             }))
     
     async def handle_typing(self, data):
@@ -193,10 +219,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
         
         User = get_user_model()
         try:
+            logger.info(f"DEBUG: Attempting to save message to DB")
             recipient = User.objects.get(id=recipient_id)
+            logger.info(f"DEBUG: Found recipient: {recipient.username}")
             
             # Get or create chat room
             chat_room = ChatRoom.get_or_create_room(self.user, recipient)
+            logger.info(f"DEBUG: Chat room ID: {chat_room.id}")
             
             # Save message
             message = ChatMessage.objects.create(
@@ -205,23 +234,31 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 content=content,
                 message_type=message_type
             )
+            logger.info(f"DEBUG: Message created with ID: {message.id}")
             
             # Update room's updated_at timestamp
             chat_room.save()  # This triggers auto_now update
+            logger.info(f"DEBUG: Chat room updated")
             
-            return {
+            result = {
                 'id': message.id,
                 'content': message.content,
                 'message_type': message.message_type,
                 'sent_at': message.sent_at.isoformat(),
                 'sender_id': message.sender.id,
-                'sender_username': message.sender.username
+                'sender_username': message.sender.username,
+                'is_read': message.is_read
             }
+            logger.info(f"DEBUG: Returning message data: {result}")
+            return result
+            
         except User.DoesNotExist:
-            logger.error(f"Recipient user {recipient_id} not found")
+            logger.info(f"DEBUG: Recipient user {recipient_id} not found")
             return None
         except Exception as e:
-            logger.error(f"Error saving chat message: {e}")
+            logger.info(f"DEBUG: Error saving chat message: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     @database_sync_to_async
@@ -258,12 +295,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
         
         User = get_user_model()
         try:
+            logger.info(f"DEBUG: Getting chat history between {self.user.id} and {other_user_id}")
             other_user = User.objects.get(id=other_user_id)
             chat_room = ChatRoom.get_or_create_room(self.user, other_user)
             
             messages = ChatMessage.objects.filter(chat_room=chat_room).order_by('sent_at')
+            logger.info(f"DEBUG: Found {messages.count()} messages in chat room {chat_room.id}")
             
-            return [{
+            result = [{
                 'id': msg.id,
                 'content': msg.content,
                 'message_type': msg.message_type,
@@ -272,10 +311,17 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'sender_username': msg.sender.username,
                 'is_read': msg.is_read
             } for msg in messages]
+            
+            logger.info(f"DEBUG: Returning {len(result)} messages")
+            return result
+            
         except User.DoesNotExist:
+            logger.info(f"DEBUG: Other user {other_user_id} not found")
             return []
         except Exception as e:
-            logger.error(f"Error getting chat history: {e}")
+            logger.info(f"DEBUG: Error getting chat history: {e}")
+            import traceback
+            traceback.logger.info_exc()
             return []
 
     @database_sync_to_async

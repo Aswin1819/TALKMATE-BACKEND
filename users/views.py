@@ -774,7 +774,9 @@ class SocialFollowUserView(APIView):
 
     def post(self, request, target_user_id):
         viewer = request.user.userprofile
+        logger.info('social follower view:viewer:',viewer)
         target = get_object_or_404(UserProfile, user__id=target_user_id)
+        logger.info('target:',target)
 
         if viewer == target:
             data = SocialActionResponseSerializer.build(
@@ -807,7 +809,9 @@ class SocialUnfollowUserView(APIView):
 
     def post(self, request, target_user_id):
         viewer = request.user.userprofile
+        logger.info('social unfollower view:viewer:',viewer)
         target = get_object_or_404(UserProfile, user__id=target_user_id)
+        logger.info("socialunfollowuserview:target:",target)
 
         if viewer.is_following(target):
             viewer.unfollow_user(target)
@@ -819,3 +823,5 @@ class SocialUnfollowUserView(APIView):
             viewer_profile=viewer, target_profile=target, message=msg
         )
         return Response(data, status=status.HTTP_200_OK)
+
+        
