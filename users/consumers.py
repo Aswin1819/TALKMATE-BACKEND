@@ -98,16 +98,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 }
             )
             
-            # IMPORTANT: Send message back to sender too!
-            await self.channel_layer.group_send(
-                f"user_{self.user.id}",
-                {
-                    'type': 'chat_message',
-                    'message': message,
-                    'sender_id': self.user.id,
-                    'sender_username': self.user.username
-                }
-            )
+
             
             # Send confirmation to sender
             await self.send(text_data=json.dumps({
@@ -321,7 +312,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             logger.info(f"DEBUG: Error getting chat history: {e}")
             import traceback
-            traceback.logger.info_exc()
+            traceback.print_exc()
             return []
 
     @database_sync_to_async

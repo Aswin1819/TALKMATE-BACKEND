@@ -238,12 +238,14 @@ class ChatRoom(models.Model):
     
     @classmethod
     def get_or_create_room(cls, user1, user2):
+        # Ensure consistent ordering to avoid duplicate rooms
+        participants = sorted([user1.id, user2.id])
+        
+        # Try to find existing room with these exact participants
         existing_room = cls.objects.filter(
-            participants=user1
-        ).filter(
-            participants=user2
+            participants__in=[user1, user2]
         ).annotate(
-            participant_count=Count('participants')
+            participant_count=models.Count('participants')
         ).filter(
             participant_count=2
         ).first()
@@ -251,6 +253,7 @@ class ChatRoom(models.Model):
         if existing_room:
             return existing_room
         
+        # Create new room
         room = cls.objects.create()
         room.participants.add(user1, user2)
         return room
