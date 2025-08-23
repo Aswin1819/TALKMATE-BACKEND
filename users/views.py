@@ -300,7 +300,7 @@ class OTPVerifyView(APIView):
     def post(self,request):
         email = request.data.get('email')
         code = request.data.get('code')
-        logger.debug(f"Received email:{email}, code:{code}")
+        # logger.debug(f"Received email:{email}, code:{code}")
         try:
             user = CustomUser.objects.get(email=email)
             logger.debug(f"found user:{user}")
